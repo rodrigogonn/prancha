@@ -1,6 +1,6 @@
 {
-  "name": "Tamanho Real",
-  "short_name": "Tamanho Real",
+  "name": "Prancha",
+  "short_name": "Prancha",
   "description": "Fotos impressas na medida exata, prontas para recortar.",
   "start_url": "./",
   "display": "standalone",

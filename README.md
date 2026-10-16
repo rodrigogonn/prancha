@@ -1,4 +1,4 @@
-# Tamanho Real
+# Prancha
 
 Fotos impressas na medida exata. Escolha o papel e o tamanho das fotos, coloque as imagens, ajuste o
 recorte, e imprima (ou baixe o PDF) em tamanho real, com marcas de corte para a tesoura.

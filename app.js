@@ -40,7 +40,7 @@ const imgs = new Map() // id -> { blob, prev (desenhável), w, h }
 let selecionado = null // quadro selecionado (objeto)
 
 // ---------- armazenamento (opcional: o app funciona sem) ----------
-const CHAVE = 'tamanho-real'
+const CHAVE = 'prancha'
 let dbp = null
 function db() {
   if (!dbp) dbp = new Promise((res, rej) => {
@@ -843,7 +843,7 @@ function baixar(blob, nome) {
   document.body.append(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(a.href), 60000)
 }
-const nomeArquivo = (ext, i, n) => `tamanho-real-${state.papel === 'custom' ? 'papel' : state.papel}${n > 1 ? '-folha' + (i + 1) : ''}.${ext}`
+const nomeArquivo = (ext, i, n) => `prancha-${state.papel === 'custom' ? 'papel' : state.papel}${n > 1 ? '-folha' + (i + 1) : ''}.${ext}`
 
 async function imprimir() {
   const L = montar(), fs = folhasComFoto(L)
