@@ -730,6 +730,8 @@ function sincronizarPainel() {
   $('virarIco').className = 'ico-folha ' + (state.deitado ? 'deitado' : 'pe')
   $('espaco').value = state.espaco; $('espacoVal').textContent = `${String(state.espaco).replace('.', ',')} mm`
   $('margem').value = state.margem; $('margemVal').textContent = `${String(state.margem).replace('.', ',')} mm`
+  $('espacoSug').hidden = state.espaco === ESPACO_SUG
+  $('margemSug').hidden = state.margem === MARGEM_SUG
   $('guias').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === state.guias))
   for (const k of ['sangria', 'girar', 'girarFoto', 'centralizar']) $(k).checked = !!state[k]
 }
