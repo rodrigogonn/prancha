@@ -2,18 +2,14 @@
 
 // ---------- dados fixos ----------
 const PAPEIS = [
-  ['A4', 'A4', 210, 297],
-  ['A5', 'A5', 148, 210],
-  ['A3', 'A3', 297, 420],
-  ['carta', 'Carta', 215.9, 279.4],
-  ['oficio', 'Ofício', 216, 330],
-  ['foto10x15', 'Foto 10 × 15', 100, 150],
-  ['foto13x18', 'Foto 13 × 18', 130, 180],
-  ['custom', 'Outro', 0, 0],
-]
-const PRESETS = [
-  ['3 × 4', 30, 40], ['5 × 7', 50, 70], ['10 × 15', 100, 150], ['13 × 18', 130, 180],
-  ['15 × 21', 150, 210], ['Quadrada 6 × 6', 60, 60], ['Cartão 9 × 5', 90, 50], ['Polaroid 8,8 × 10,7', 88, 107],
+  ['A4', 'A4 · 21 × 29,7 cm', 210, 297],
+  ['A5', 'A5 · 14,8 × 21 cm', 148, 210],
+  ['A3', 'A3 · 29,7 × 42 cm', 297, 420],
+  ['carta', 'Carta · 21,6 × 27,9 cm', 215.9, 279.4],
+  ['oficio', 'Ofício · 21,6 × 33 cm', 216, 330],
+  ['foto10x15', 'Papel foto 10 × 15 cm', 100, 150],
+  ['foto13x18', 'Papel foto 13 × 18 cm', 130, 180],
+  ['custom', 'Outro tamanho…', 0, 0],
 ]
 const ESPACO_SUG = 4, MARGEM_SUG = 5, SANGRIA = 1
 
@@ -27,20 +23,37 @@ function estadoInicial() {
     papel: 'A4', papelW: 210, papelH: 297, deitado: false,
     margem: MARGEM_SUG, espaco: ESPACO_SUG,
     guias: 'cantos', sangria: true, girar: true, girarFoto: true, centralizar: false,
-    ativo: null,
-    grupos: [novoGrupo(30, 40, 6)],
+    grupos: [], ativo: null, dicaVista: false,
+    // o caminho de quem chega: fotos → tamanho → prancha
+    etapa: 'fotos',
+    novo: { fotos: [], w: 30, h: 40, copias: 1, encher: false },
   }
 }
-function novoGrupo(w, h, n) {
-  return { id: uid(), w, h, quadros: Array.from({ length: n }, () => ({ img: null, crop: null })) }
-}
-
 let state = estadoInicial()
 const imgs = new Map() // id -> { blob, prev (desenhável), w, h }
-let selecionado = null // quadro selecionado (objeto)
+let selecionado = null // foto selecionada
+
+// Um tamanho guarda as fotos, quantas cópias de cada, e as cópias a mais que completam a folha.
+function quadrosDe(g) {
+  const out = []
+  for (const f of g.fotos) for (let i = 0; i < g.copias; i++) out.push(f)
+  for (let i = 0; i < (g.extra || 0) && g.fotos.length; i++) out.push(g.fotos[i % g.fotos.length])
+  return out
+}
+// Foto que acabou de chegar ainda não está em lugar nenhum: a limpeza não pode levá-la.
+const chegando = new Set()
+function idsUsados() {
+  const s = new Set([...state.novo.fotos, ...chegando])
+  state.grupos.forEach(g => g.fotos.forEach(f => s.add(f.img)))
+  return s
+}
+const grupoDe = (f) => state.grupos.find(g => g.fotos.includes(f))
+function viraPadrao(info, g) {
+  return !!(state.girarFoto && info && g.w !== g.h && info.w !== info.h && (info.w > info.h) !== (g.w > g.h))
+}
 
 // ---------- armazenamento (opcional: o app funciona sem) ----------
-const CHAVE = 'prancha'
+const CHAVE = 'prancha-v2'
 let dbp = null
 function db() {
   if (!dbp) dbp = new Promise((res, rej) => {
@@ -69,25 +82,27 @@ function salvar() {
   clearTimeout(salvarTimer)
   salvarTimer = setTimeout(() => {
     try { localStorage.setItem(CHAVE, JSON.stringify(state)) } catch {}
-    const usados = new Set()
-    state.grupos.forEach(g => g.quadros.forEach(q => q.img && usados.add(q.img)))
+    const usados = idsUsados()
     for (const id of [...imgs.keys()]) {
-      if (!usados.has(id)) { imgs.delete(id); idb('readwrite', s => s.delete(id)) }
+      if (!usados.has(id)) { const i = imgs.get(id); if (i.url) URL.revokeObjectURL(i.url); imgs.delete(id); idb('readwrite', s => s.delete(id)) }
     }
-  }, 300)
+  }, 400)
 }
 async function carregar() {
   let salvo = null
   try { salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null') } catch {}
   if (!salvo || !Array.isArray(salvo.grupos)) return
   state = Object.assign(estadoInicial(), salvo)
-  const ids = new Set()
-  state.grupos.forEach(g => g.quadros.forEach(q => q.img && ids.add(q.img)))
-  for (const id of ids) {
+  state.novo = Object.assign(estadoInicial().novo, salvo.novo)
+  for (const id of idsUsados()) {
     const blob = await idb('readonly', s => s.get(id))
     if (blob) { try { imgs.set(id, await prepararBlob(blob)) } catch {} }
   }
-  state.grupos.forEach(g => g.quadros.forEach(q => { if (q.img && !imgs.has(q.img)) { q.img = null; q.crop = null } }))
+  state.grupos.forEach(g => { g.fotos = g.fotos.filter(f => imgs.has(f.img)) })
+  state.grupos = state.grupos.filter(g => g.fotos.length)
+  state.novo.fotos = state.novo.fotos.filter(id => imgs.has(id))
+  if (state.etapa === 'tamanho' && !state.novo.fotos.length) state.etapa = 'fotos'
+  if (state.etapa === 'prancha' && !state.grupos.length) state.etapa = 'fotos'
 }
 
 // ---------- imagens ----------
@@ -134,6 +149,7 @@ async function importar(file) {
   if (im.close) im.close()
   const info = await prepararBlob(blob)
   const id = uid()
+  chegando.add(id)
   imgs.set(id, info)
   idb('readwrite', s => s.put(blob, id))
   return id
@@ -217,7 +233,7 @@ function montarCom(rots) {
   const cabe = (w, h) => w <= uw + 1e-6 && h <= uh + 1e-6
   state.grupos.forEach((g, gi) => {
     if (!cabe(g.w, g.h) && !cabe(g.h, g.w)) { naoCabe.push(g); return }
-    g.quadros.forEach((q, qi) => {
+    quadrosDe(g).forEach((q, qi) => {
       const [lw, lh] = dimsQ(g, q)
       let rot = !!rots[gi]
       if (!cabe(...(rot ? [lh, lw] : [lw, lh]))) rot = !rot
@@ -280,8 +296,7 @@ function desenharFolha(ctx, folha, L, k, modo, fontes) {
   }
   desenharGuias(ctx, folha, b, modo, fontes)
   if (modo === 'tela' && selecionado) {
-    const it = folha.itens.find(i => i.q === selecionado)
-    if (it) {
+    for (const it of folha.itens.filter(i => i.q === selecionado)) {
       ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = Math.max(0.8, 1.6 / k * 2)
       ctx.strokeRect(it.x - 0.6, it.y - 0.6, it.w + 1.2, it.h + 1.2)
     }
@@ -322,13 +337,15 @@ function desenharGuias(ctx, folha, b, modo, fontes) {
 let ultimoL = null
 const canvases = []
 function render() {
+  mostrarEtapa()
+  if (state.etapa !== 'prancha') { salvar(); return }
   const L = montar()
   ultimoL = L
   const cont = $('folhas'), prev = $('previa')
-  const estreito = window.innerWidth <= 820
-  const cw = prev.clientWidth - (estreito ? 24 : 40)
-  const ch = prev.clientHeight - prev.querySelector('.barra-previa').offsetHeight - $('avisos').offsetHeight - 110
-  let dw = estreito ? Math.min(cw, window.innerHeight * 0.58 * L.W / L.H) : Math.min(cw, ch * L.W / L.H)
+  const estreito = window.innerWidth <= 860
+  const cw = prev.clientWidth - (estreito ? 24 : 48)
+  const ch = prev.clientHeight - prev.querySelector('.barra-previa').offsetHeight - $('avisos').offsetHeight - 90
+  let dw = estreito ? Math.min(cw, window.innerHeight * 0.62 * L.W / L.H) : Math.min(cw, ch * L.W / L.H)
   dw = Math.max(200, Math.min(dw, 900))
   const dh = dw * L.H / L.W
   const n = Math.max(1, L.folhas.length)
@@ -351,22 +368,22 @@ function render() {
     const ctx = cv.c.getContext('2d')
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     desenharFolha(ctx, folha, L, pw / L.W, 'tela', fontes)
-    cv.rot.textContent = n > 1 ? `Folha ${i + 1} de ${n}` : `${cm(L.W)} × ${cm(L.H)} cm`
+    cv.rot.textContent = n > 1 ? `Folha ${i + 1} de ${n}` : `${nomePapel()} · ${cm(L.W)} × ${cm(L.H)} cm`
   })
-  // resumo e avisos
-  const total = state.grupos.reduce((s, g) => s + g.quadros.length, 0)
-  const comFoto = state.grupos.reduce((s, g) => s + g.quadros.filter(q => q.img).length, 0)
-  const nomePapel = state.papel === 'custom' ? `${cm(state.papelW)} × ${cm(state.papelH)} cm` : (PAPEIS.find(p => p[0] === state.papel) || ['', ''])[1]
-  $('resumo').textContent = `${nomePapel} ${state.deitado ? 'deitado' : 'em pé'} · ${comFoto} de ${total} com foto · ${L.folhas.length || 1} ${L.folhas.length > 1 ? 'folhas' : 'folha'}`
+  const total = state.grupos.reduce((s, g) => s + quadrosDe(g).length, 0)
+  $('resumo').textContent = `${nomePapel()} ${state.deitado ? 'deitado' : 'em pé'} · ${total} ${total === 1 ? 'foto' : 'fotos'} · ${n} ${n > 1 ? 'folhas' : 'folha'}`
   const av = []
-  for (const g of L.naoCabe) av.push(['alerta', `${cm(g.w)} × ${cm(g.h)} cm não cabe nesse papel. Tente virar o papel ou diminuir a margem.`])
-  if (total && !comFoto) av.push(['', 'Clique num quadro para pôr a foto, ou arraste as fotos para cima da folha.'])
-  else if (comFoto < total) av.push(['', `${total - comFoto} ${total - comFoto > 1 ? 'quadros vazios ficam' : 'quadro vazio fica'} de fora da impressão.`])
+  for (const g of L.naoCabe) av.push(['alerta', `${cm(g.w)} × ${cm(g.h)} cm não cabe nesse papel. Vire o papel ou diminua a margem.`])
+  if (!state.dicaVista) av.push(['', toque() ? 'Toque numa foto para ajustar o recorte.' : 'Clique numa foto para ajustar o recorte. Arraste uma sobre a outra para trocar de lugar.'])
   $('avisos').innerHTML = av.map(([c, t]) => `<div class="${c}">${t}</div>`).join('')
-  const temFoto = comFoto > 0
-  for (const id of ['btnImprimir', 'btnPdf', 'btnPng']) $(id).disabled = !temFoto
+  for (const id of ['btnImprimir', 'btnPdf', 'btnPng']) $(id).disabled = !total
   renderGrupos(L)
   salvar()
+}
+const toque = () => matchMedia('(pointer: coarse)').matches
+function nomePapel() {
+  if (state.papel === 'custom') return `${cm(state.papelW)} × ${cm(state.papelH)} cm`
+  return ({ foto10x15: 'Foto 10 × 15', foto13x18: 'Foto 13 × 18', carta: 'Carta', oficio: 'Ofício' })[state.papel] || state.papel
 }
 
 function itemEm(i, ev) {
@@ -386,7 +403,7 @@ function ligarCanvas(c, i) {
     arraste = { origem: it, x: ev.clientX, y: ev.clientY, ativo: false, alvo: null, mouse: ev.pointerType === 'mouse' }
   })
   c.addEventListener('pointermove', (ev) => {
-    if (!arraste || !arraste.mouse || !arraste.origem.q.img) return
+    if (!arraste || !arraste.mouse) return
     if (!arraste.ativo && Math.hypot(ev.clientX - arraste.x, ev.clientY - arraste.y) > 6) { arraste.ativo = true; c.classList.add('arrastando') }
     if (arraste.ativo) {
       const alvo = itemEm(i, ev)
@@ -404,105 +421,175 @@ function ligarCanvas(c, i) {
     const it = itemEm(i, ev)
     if (!it || it.q !== a.origem.q) return
     selecionado = it.q
-    if (it.q.img) abrirEditor(it)
-    else escolherArquivos(it.g, it.q)
+    abrirEditor(it)
     render()
   })
   c.addEventListener('pointerleave', () => { if (arraste && arraste.ativo) { arraste.alvo = null; render() } })
-  c.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy' })
-  c.addEventListener('drop', (ev) => {
-    ev.preventDefault()
-    const files = [...ev.dataTransfer.files].filter(f => f.type.startsWith('image/'))
-    if (!files.length) return
-    const it = itemEm(i, ev)
-    preencher(files, it ? it.g : grupoAtivo(), it ? it.q : null)
-  })
 }
 function trocar(a, b) {
-  const ga = state.grupos.find(g => g.quadros.includes(a)), gb = state.grupos.find(g => g.quadros.includes(b))
-  ;[a.img, b.img] = [b.img, a.img]
-  ;[a.vira, b.vira] = [b.vira, a.vira]
-  if (ga === gb) [a.crop, b.crop] = [b.crop, a.crop]
-  else { a.crop = null; b.crop = null }
-  selecionado = b
+  const ga = grupoDe(a), gb = grupoDe(b)
+  const ia = ga.fotos.indexOf(a), ib = gb.fotos.indexOf(b)
+  ga.fotos[ia] = b; gb.fotos[ib] = a
+  if (ga !== gb) for (const [f, g] of [[a, gb], [b, ga]]) { f.crop = null; f.vira = viraPadrao(imgs.get(f.img), g) }
+  selecionado = a
 }
 
-// drop na área toda (fora da folha) cai no tamanho ativo
+// arrastar fotos do computador para dentro da página
 let soltaTimer = null
 document.addEventListener('dragover', (ev) => {
   ev.preventDefault()
-  $('folhas').classList.add('soltando')
-  clearTimeout(soltaTimer); soltaTimer = setTimeout(() => $('folhas').classList.remove('soltando'), 150)
+  document.body.classList.add('soltando')
+  clearTimeout(soltaTimer); soltaTimer = setTimeout(() => document.body.classList.remove('soltando'), 150)
 })
 document.addEventListener('drop', (ev) => {
   ev.preventDefault()
-  if (ev.target.tagName === 'CANVAS') return
   const files = [...(ev.dataTransfer?.files || [])].filter(f => f.type.startsWith('image/'))
-  if (files.length) preencher(files, grupoAtivo(), null)
+  if (!files.length) return
+  if (state.etapa === 'prancha') adicionarFotos(files, grupoAtivo())
+  else novasFotosNoAssistente(files)
 })
 
 function grupoAtivo() {
-  return state.grupos.find(g => g.id === state.ativo) || state.grupos[0]
+  return state.grupos.find(g => g.id === state.ativo) || state.grupos[state.grupos.length - 1]
 }
 
-let destinoArquivo = null
-function escolherArquivos(g, q) {
-  destinoArquivo = { g, q }
+// ---------- fotos ----------
+let destino = null
+function escolherArquivos(d) {
+  destino = d
+  $('arquivo').multiple = d.modo !== 'trocar'
   $('arquivo').value = ''
   $('arquivo').click()
 }
-$('arquivo').addEventListener('change', () => {
+$('arquivo').addEventListener('change', async () => {
   const files = [...$('arquivo').files]
-  const d = destinoArquivo || { g: grupoAtivo(), q: null }
-  destinoArquivo = null
-  if (files.length) preencher(files, d.g, d.q, d.trocar)
+  const d = destino || { modo: 'assistente' }
+  destino = null
+  if (!files.length) return
+  if (d.modo === 'assistente') await novasFotosNoAssistente(files)
+  else if (d.modo === 'grupo') await adicionarFotos(files, d.g)
+  else if (d.modo === 'trocar') await trocarFoto(d.f, files[0])
 })
-
-// Coloca as fotos a partir do quadro clicado, depois nos vazios; o que sobrar vira quadro novo.
-async function preencher(files, g, inicio, soEste) {
-  if (!g) { g = novoGrupo(30, 40, 0); state.grupos.push(g) }
+async function importarVarias(files) {
   ocupado(true, files.length > 1 ? `Carregando ${files.length} fotos…` : 'Carregando…')
+  const ids = []
   try {
-    const ids = []
     for (const f of files) { try { ids.push(await importar(f)) } catch { toast(`Não consegui abrir ${f.name}`) } }
-    const alvos = []
-    if (inicio) alvos.push(inicio)
-    if (!soEste) {
-      for (const q of g.quadros) if (!q.img && q !== inicio) alvos.push(q)
-      for (const og of state.grupos) if (og !== g) for (const q of og.quadros) if (!q.img) alvos.push(q)
-    }
-    let girou = 0
-    ids.forEach((id, n) => {
-      let q = alvos[n]
-      if (!q) { q = { img: null, crop: null }; g.quadros.push(q) }
-      const dono = state.grupos.find(x => x.quadros.includes(q))
-      q.img = id
-      const f = imgs.get(id)
-      q.crop = cropPadrao()
-      q.vira = state.girarFoto && dono.w !== dono.h && f.w !== f.h && (f.w > f.h) !== (dono.w > dono.h)
-      if (q.vira) girou++
-      selecionado = q
-    })
-    if (girou) toast(girou > 1 ? `${girou} fotos ganharam quadro deitado, no formato delas.` : 'A foto ganhou quadro deitado, no formato dela.')
   } finally { ocupado(false) }
+  return ids
+}
+async function novasFotosNoAssistente(files) {
+  const ids = await importarVarias(files)
+  state.novo.fotos.push(...ids)
+  ids.forEach(id => chegando.delete(id))
+  if (state.novo.fotos.length) state.etapa = 'tamanho'
   render()
+}
+async function adicionarFotos(files, g) {
+  if (!g) return novasFotosNoAssistente(files)
+  const ids = await importarVarias(files)
+  for (const id of ids) {
+    const f = { img: id, crop: null, vira: viraPadrao(imgs.get(id), g) }
+    g.fotos.push(f); selecionado = f
+    chegando.delete(id)
+  }
+  g.extra = 0
+  state.ativo = g.id
+  render()
+}
+async function trocarFoto(f, file) {
+  const [id] = await importarVarias([file])
+  if (!id) return
+  f.img = id; f.crop = null; f.vira = viraPadrao(imgs.get(id), grupoDe(f))
+  chegando.delete(id)
+  render()
+}
+function urlDe(id) {
+  const i = imgs.get(id)
+  if (!i) return ''
+  if (!i.url) i.url = URL.createObjectURL(i.blob)
+  return i.url
+}
+
+// ---------- assistente ----------
+function mostrarEtapa() {
+  const e = state.etapa
+  document.body.dataset.etapa = e
+  if (e === 'prancha') return
+  const adicionando = state.grupos.length > 0
+  document.querySelectorAll('.wz-trilha li').forEach((li, i) => {
+    li.classList.toggle('feito', (e === 'tamanho' && i === 0))
+    li.classList.toggle('agora', (e === 'fotos' && i === 0) || (e === 'tamanho' && i === 1))
+  })
+  $('wzFotos').hidden = e !== 'fotos'
+  $('wzTamanho').hidden = e !== 'tamanho'
+  $('wzCancelar').hidden = !adicionando
+  $('wzTitulo1').textContent = adicionando ? 'Quais fotos vão nesse outro tamanho?' : 'Quais fotos você quer imprimir?'
+  if (e !== 'tamanho') return
+  const n = state.novo
+  $('wzThumbs').innerHTML = n.fotos.map((id, i) => `<span class="thumb"><img src="${urlDe(id)}" alt=""><button data-i="${i}" aria-label="tirar esta foto">✕</button></span>`).join('') +
+    '<button class="thumb mais" id="wzMaisFotos" aria-label="mais fotos">+</button>'
+  $('wzQtd').textContent = `${n.fotos.length} ${n.fotos.length > 1 ? 'fotos escolhidas' : 'foto escolhida'}`
+  for (const k of ['w', 'h']) { const inp = $(k === 'w' ? 'wzW' : 'wzH'); if (document.activeElement !== inp) inp.value = cm(n[k]) }
+  $('wzCopias').textContent = n.copias
+  $('wzEncher').checked = n.encher
+  $('wzPapelBloco').hidden = adicionando
+  const cabe = Math.max(cabem(n.w, n.h), state.girar ? cabem(n.h, n.w) : 0)
+  const totalNovo = n.fotos.length * n.copias
+  $('wzConta').innerHTML = !cabe ? `<span class="aviso">${cm(n.w)} × ${cm(n.h)} cm não cabe no papel ${nomePapel()}.</span>`
+    : n.encher ? `A folha vai ser completada com cópias. Cabem <b>${cabe}</b> numa folha ${nomePapel()}.`
+      : `<b>${totalNovo}</b> ${totalNovo > 1 ? 'fotos' : 'foto'} na prancha · cabem <b>${cabe}</b> numa folha ${nomePapel()}.`
+  $('wzMontar').disabled = !cabe
+}
+function montarDoAssistente() {
+  const n = state.novo
+  const g = { id: uid(), w: n.w, h: n.h, fotos: [], copias: n.copias, extra: 0 }
+  g.fotos = n.fotos.map(id => ({ img: id, crop: null, vira: viraPadrao(imgs.get(id), g) }))
+  state.grupos.push(g)
+  state.ativo = g.id
+  state.novo = { ...estadoInicial().novo, w: n.w, h: n.h }
+  state.etapa = 'prancha'
+  if (n.encher) { render(); encher(g, true) }
+  render()
+}
+function ligarAssistente() {
+  $('wzEscolher').onclick = () => escolherArquivos({ modo: 'assistente' })
+  $('wzThumbs').addEventListener('click', (ev) => {
+    if (ev.target.closest('#wzMaisFotos')) return escolherArquivos({ modo: 'assistente' })
+    const b = ev.target.closest('button[data-i]'); if (!b) return
+    state.novo.fotos.splice(+b.dataset.i, 1)
+    if (!state.novo.fotos.length) state.etapa = 'fotos'
+    render()
+  })
+  for (const [id, k] of [['wzW', 'w'], ['wzH', 'h']]) {
+    const inp = $(id)
+    inp.addEventListener('input', () => { const v = lerCm(inp.value); if (v && v >= 5 && v <= 2000) { state.novo[k] = v; mostrarEtapa() } })
+    inp.addEventListener('change', () => render())
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur() })
+  }
+  $('wzInverter').onclick = () => { const n = state.novo; [n.w, n.h] = [n.h, n.w]; render() }
+  $('wzMenos').onclick = () => { state.novo.copias = Math.max(1, state.novo.copias - 1); render() }
+  $('wzMais').onclick = () => { state.novo.copias = Math.min(99, state.novo.copias + 1); render() }
+  $('wzEncher').onchange = () => { state.novo.encher = $('wzEncher').checked; render() }
+  $('wzVoltar').onclick = () => { state.etapa = 'fotos'; render() }
+  $('wzMontar').onclick = montarDoAssistente
+  $('wzCancelar').onclick = () => { state.novo.fotos = []; state.etapa = 'prancha'; render() }
 }
 
 // ---------- painel ----------
 function renderGrupos(L) {
   const box = $('grupos')
   box.innerHTML = ''
-  state.grupos.forEach((g) => {
+  state.grupos.forEach((g, gi) => {
     const el = document.createElement('div')
-    el.className = 'grupo' + (g === grupoAtivo() ? ' ativo' : '')
-    const comFoto = g.quadros.filter(q => q.img).length
-    const gi = state.grupos.indexOf(g)
+    el.className = 'grupo' + (g === grupoAtivo() && state.grupos.length > 1 ? ' ativo' : '')
     const giro = !!(L.rots && L.rots[gi])
-    const capUsada = cabem(...(giro ? [g.h, g.w] : [g.w, g.h])), capGirado = cabem(g.h, g.w)
-    const cap = Math.max(capUsada, cabem(g.w, g.h), capGirado)
+    const cap = Math.max(cabem(...(giro ? [g.h, g.w] : [g.w, g.h])), cabem(g.w, g.h))
+    const na = quadrosDe(g).length
+    const fw = Math.round(22 * g.w / Math.max(g.w, g.h)), fh = Math.round(22 * g.h / Math.max(g.w, g.h))
     el.innerHTML = `
       <div class="g1">
-        <span class="forma"><i style="width:${Math.round(26 * g.w / Math.max(g.w, g.h))}px;height:${Math.round(26 * g.h / Math.max(g.w, g.h))}px"></i></span>
+        <span class="forma"><i style="width:${fw}px;height:${fh}px"></i></span>
         <input type="text" inputmode="decimal" data-k="w" value="${cm(g.w)}" aria-label="largura em cm">
         <span class="x">×</span>
         <input type="text" inputmode="decimal" data-k="h" value="${cm(g.h)}" aria-label="altura em cm">
@@ -510,104 +597,95 @@ function renderGrupos(L) {
         <button class="btn icone" data-a="inverter" title="trocar largura e altura">⇄</button>
         <button class="btn icone" data-a="remover" title="tirar este tamanho">✕</button>
       </div>
+      <div class="thumbs">${g.fotos.map((f, i) => `<button class="thumb${f === selecionado ? ' sel' : ''}" data-f="${i}" title="ajustar"><img src="${urlDe(f.img)}" alt=""></button>`).join('')}<button class="thumb mais" data-a="fotos" title="mais fotos neste tamanho">+</button></div>
       <div class="g2">
-        <span class="qtd"><button data-a="menos" aria-label="menos">−</button><span>${g.quadros.length}</span><button data-a="mais" aria-label="mais">+</button></span>
-        <button class="btn pequeno primario" data-a="fotos">+ Fotos</button>
+        <span class="rot-qtd">Cópias</span>
+        <span class="qtd"><button data-a="menos" aria-label="menos">−</button><span>${g.copias}</span><button data-a="mais" aria-label="mais">+</button></span>
+        <button class="btn pequeno" data-a="encher">Encher a folha</button>
       </div>
-      <div class="info">${cap ? `Cabem <b>${capUsada || cap}</b> por folha${giro ? ' (quadros deitados)' : (state.girar && capGirado > capUsada ? ` (${capGirado} se precisar girar)` : '')} · ${comFoto} com foto · <button class="link" data-a="encher">encher a folha</button>` : '<span class="aviso">Não cabe nesse papel</span>'}</div>`
+      <div class="info">${cap ? `<b>${na}</b> ${na > 1 ? 'fotos' : 'foto'} na prancha · cabem <b>${cap}</b> por folha` : '<span class="aviso">Não cabe nesse papel</span>'}</div>`
     el.addEventListener('click', (ev) => {
-      if (state.ativo !== g.id) { state.ativo = g.id; if (!ev.target.closest('button,input')) render() }
+      if (state.ativo !== g.id && state.grupos.length > 1) { state.ativo = g.id; if (!ev.target.closest('button,input')) render() }
     })
     el.querySelectorAll('input').forEach(inp => {
       const aplicar = () => {
         const v = lerCm(inp.value)
-        if (v && v >= 5 && v <= 2000) { g[inp.dataset.k] = v; g.quadros.forEach(q => { if (q.crop) limitarSeTem(q, g) }) }
+        if (v && v >= 5 && v <= 2000) { g[inp.dataset.k] = v; g.fotos.forEach(f => limitarSeTem(f, g)) }
         render()
       }
       inp.addEventListener('change', aplicar)
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur() })
     })
-    el.querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => acaoGrupo(g, bt.dataset.a)))
+    el.querySelectorAll('button[data-a]').forEach(bt => bt.addEventListener('click', () => acaoGrupo(g, bt.dataset.a)))
+    el.querySelectorAll('button[data-f]').forEach(bt => bt.addEventListener('click', () => {
+      const f = g.fotos[+bt.dataset.f]
+      selecionado = f
+      abrirEditor({ g, q: f })
+      render()
+    }))
     box.append(el)
   })
 }
-function limitarSeTem(q, g) {
-  const f = imgs.get(q.img)
-  if (f) limitarCrop(q.crop, f, ...dimsQ(g, q))
+function limitarSeTem(f, g) {
+  const i = imgs.get(f.img)
+  if (i && f.crop) limitarCrop(f.crop, i, ...dimsQ(g, f))
 }
 function acaoGrupo(g, a) {
   state.ativo = g.id
-  if (a === 'menos') {
-    if (g.quadros.length <= 1) return render()
-    let i = -1
-    for (let k = g.quadros.length - 1; k >= 0; k--) if (!g.quadros[k].img) { i = k; break }
-    g.quadros.splice(i < 0 ? g.quadros.length - 1 : i, 1)
-  } else if (a === 'mais') {
-    g.quadros.push({ img: null, crop: null })
-  } else if (a === 'encher') {
-    encher(g)
-  } else if (a === 'fotos') {
-    return escolherArquivos(g, null)
-  } else if (a === 'inverter') {
-    ;[g.w, g.h] = [g.h, g.w]
-    g.quadros.forEach(q => { if (q.crop) limitarSeTem(q, g) })
-  } else if (a === 'remover') {
-    if (state.grupos.length === 1) { toast('Precisa ter ao menos um tamanho.'); return }
-    if (g.quadros.some(q => q.img) && !confirm('Tirar este tamanho e as fotos dele?')) return
+  if (a === 'menos') { g.copias = Math.max(1, g.copias - 1); g.extra = 0 }
+  else if (a === 'mais') { g.copias = Math.min(99, g.copias + 1); g.extra = 0 }
+  else if (a === 'encher') encher(g)
+  else if (a === 'fotos') return escolherArquivos({ modo: 'grupo', g })
+  else if (a === 'inverter') { [g.w, g.h] = [g.h, g.w]; g.fotos.forEach(f => limitarSeTem(f, g)) }
+  else if (a === 'remover') {
+    if (!confirm(`Tirar o tamanho ${cm(g.w)} × ${cm(g.h)} cm e as fotos dele?`)) return
     state.grupos = state.grupos.filter(x => x !== g)
     state.ativo = null
+    if (!state.grupos.length) state.etapa = 'fotos'
   }
   render()
 }
-// Acrescenta quadros até a folha (a última) ficar cheia.
-function encher(g) {
+// Completa a última folha com cópias: primeiro por igual, depois uma a uma até não caber mais.
+function encher(g, calado) {
+  if (!g.fotos.length) return
   if (!cabem(g.w, g.h) && !cabem(g.h, g.w)) return toast('Esse tamanho não cabe no papel.')
-  let base = montar().folhas.length
-  let primeira = true
-  for (let n = 0; n < 500; n++) {
-    g.quadros.push({ img: null, crop: null })
-    const agora = montar().folhas.length
-    if (agora > base) {
-      if (primeira && agora === base + 1 && base > 0) { base = agora; primeira = false; continue }
-      g.quadros.pop(); break
-    }
-    primeira = false
-  }
+  const antes = quadrosDe(g).length
+  g.extra = 0
+  const folhas = () => montar().folhas.length
+  const base = folhas()
+  while (g.copias < 500) { g.copias++; if (folhas() > base) { g.copias--; break } }
+  while (g.extra < g.fotos.length - 1) { g.extra++; if (folhas() > base) { g.extra--; break } }
+  const depois = quadrosDe(g).length
+  if (!calado) toast(depois > antes ? `Folha completa: ${depois} fotos de ${cm(g.w)} × ${cm(g.h)} cm.` : 'A folha já está cheia.')
 }
 
+function preencherPapeis(sel) { sel.innerHTML = PAPEIS.map(p => `<option value="${p[0]}">${p[1]}</option>`).join('') }
+function escolherPapel(v) {
+  const p = PAPEIS.find(x => x[0] === v)
+  state.papel = p[0]
+  if (p[0] !== 'custom') { state.papelW = p[2]; state.papelH = p[3] }
+  sincronizarPainel(); render()
+}
 function montarPainel() {
-  $('papeis').innerHTML = PAPEIS.map(p => `<button class="chip" data-p="${p[0]}"${p[2] ? ` title="${cm(p[2])} × ${cm(p[3])} cm"` : ''}>${p[1]}</button>`).join('')
-  const mini = (w, h) => `<i class="mini" style="width:${Math.round(14 * w / Math.max(w, h))}px;height:${Math.round(14 * h / Math.max(w, h))}px"></i>`
-  $('presets').innerHTML = PRESETS.map((p, i) => `<button class="chip" data-i="${i}">${mini(p[1], p[2])}${p[0]}</button>`).join('') + '<button class="chip" data-i="-1">Outro…</button>'
-  $('presets').addEventListener('click', (ev) => {
-    const b = ev.target.closest('.chip'); if (!b) return
-    const i = +b.dataset.i
-    const [w, h] = i >= 0 ? [PRESETS[i][1], PRESETS[i][2]] : [50, 50]
-    const g = novoGrupo(w, h, 1)
-    state.grupos.push(g); state.ativo = g.id
-    render()
-    if (i < 0) setTimeout(() => { const inp = $('grupos').lastElementChild.querySelector('input'); inp.focus(); inp.select() }, 30)
-  })
-  $('papeis').addEventListener('click', (ev) => {
-    const b = ev.target.closest('.chip'); if (!b) return
-    const p = PAPEIS.find(x => x[0] === b.dataset.p)
-    state.papel = p[0]
-    if (p[0] !== 'custom') { state.papelW = p[2]; state.papelH = p[3] }
-    sincronizarPainel(); render()
-  })
+  preencherPapeis($('papel')); preencherPapeis($('wzPapel'))
+  $('papel').onchange = () => escolherPapel($('papel').value)
+  $('wzPapel').onchange = () => escolherPapel($('wzPapel').value)
   for (const k of ['papelW', 'papelH']) $(k).addEventListener('change', () => {
     const v = lerCm($(k).value); if (v && v >= 20 && v <= 3000) state[k] = v
     sincronizarPainel(); render()
   })
-  $('virar').onclick = () => { state.deitado = !state.deitado; sincronizarPainel(); render() }
-  $('emPe').onclick = () => { state.deitado = false; sincronizarPainel(); render() }
-  $('deitado').onclick = () => { state.deitado = true; sincronizarPainel(); render() }
+  const deitar = (v) => { state.deitado = v; sincronizarPainel(); render() }
+  $('virar').onclick = () => deitar(!state.deitado)
+  $('emPe').onclick = () => deitar(false); $('deitado').onclick = () => deitar(true)
+  $('wzEmPe').onclick = () => deitar(false); $('wzDeitado').onclick = () => deitar(true)
   $('espaco').oninput = () => { state.espaco = +$('espaco').value; sincronizarPainel(); render() }
   $('margem').oninput = () => { state.margem = +$('margem').value; sincronizarPainel(); render() }
   $('espacoSug').onclick = () => { state.espaco = ESPACO_SUG; sincronizarPainel(); render() }
   $('margemSug').onclick = () => { state.margem = MARGEM_SUG; sincronizarPainel(); render() }
   $('guias').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; state.guias = b.dataset.v; sincronizarPainel(); render() })
   for (const k of ['sangria', 'girar', 'girarFoto', 'centralizar']) $(k).onchange = () => { state[k] = $(k).checked; render() }
+  $('outroTamanho').onclick = () => { state.novo.fotos = []; state.etapa = 'fotos'; render(); window.scrollTo(0, 0) }
+  $('addFotos').onclick = () => escolherArquivos({ modo: 'grupo', g: grupoAtivo() })
   $('limpar').onclick = () => {
     if (!confirm('Apagar tudo e começar do zero?')) return
     state = estadoInicial(); selecionado = null
@@ -616,15 +694,16 @@ function montarPainel() {
   $('btnImprimir').onclick = imprimir
   $('btnPdf').onclick = baixarPdf
   $('btnPng').onclick = baixarPng
-  $('addFotos').onclick = () => escolherArquivos(grupoAtivo(), null)
+  ligarAssistente()
 }
 function sincronizarPainel() {
-  $('papeis').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.p === state.papel))
+  $('papel').value = state.papel; $('wzPapel').value = state.papel
   $('papelCustom').hidden = state.papel !== 'custom'
   $('papelW').value = cm(state.papelW); $('papelH').value = cm(state.papelH)
-  $('emPe').classList.toggle('on', !state.deitado)
+  for (const [a, b] of [['emPe', 'deitado'], ['wzEmPe', 'wzDeitado']]) {
+    $(a).classList.toggle('on', !state.deitado); $(b).classList.toggle('on', state.deitado)
+  }
   $('virarIco').className = 'ico-folha ' + (state.deitado ? 'deitado' : 'pe')
-  $('deitado').classList.toggle('on', state.deitado)
   $('espaco').value = state.espaco; $('espacoVal').textContent = `${String(state.espaco).replace('.', ',')} mm`
   $('margem').value = state.margem; $('margemVal').textContent = `${String(state.margem).replace('.', ',')} mm`
   $('guias').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === state.guias))
@@ -637,6 +716,7 @@ function abrirEditor(it) {
   const f = imgs.get(it.q.img)
   if (!f) return
   if (!it.q.crop) it.q.crop = cropPadrao()
+  state.dicaVista = true
   ed = { it, f, ponteiros: new Map() }
   rotuloEditor()
   $('editor').hidden = false
@@ -800,15 +880,14 @@ $('edGirar').onclick = () => mudarCrop(c => { girarPara(c, totalGraus(c) + 90) }
 $('edVirar').onclick = () => { ed.it.q.vira = !ed.it.q.vira; rotuloEditor(); mudarCrop(c => { c.s = 1; c.x = 0; c.y = 0 }); render() }
 $('edPreencher').onclick = () => mudarCrop(c => { c.s = 1; c.x = 0; c.y = 0 })
 $('edInteira').onclick = () => mudarCrop(c => { c.s = 0; c.x = 0; c.y = 0 })
-$('edTrocar').onclick = () => { const it = ed.it; fecharEditor(); destinoArquivo = { g: it.g, q: it.q, trocar: true }; $('arquivo').value = ''; $('arquivo').click() }
-$('edRepetir').onclick = () => {
-  const { it } = ed
-  let n = 0
-  for (const q of it.g.quadros) if (!q.img) { q.img = it.q.img; q.crop = { ...it.q.crop }; q.vira = it.q.vira; n++ }
-  toast(n ? `Foto repetida em ${n} ${n > 1 ? 'quadros' : 'quadro'}.` : 'Não há quadro vazio nesse tamanho. Use o + ou "Encher a folha".')
+$('edTrocar').onclick = () => { const f = ed.it.q; fecharEditor(); escolherArquivos({ modo: 'trocar', f }) }
+$('edTirar').onclick = () => {
+  const f = ed.it.q, g = grupoDe(f)
+  g.fotos = g.fotos.filter(x => x !== f); g.extra = 0
+  if (!g.fotos.length) state.grupos = state.grupos.filter(x => x !== g)
+  if (!state.grupos.length) state.etapa = 'fotos'
   fecharEditor()
 }
-$('edTirar').onclick = () => { ed.it.q.img = null; ed.it.q.crop = null; fecharEditor() }
 $('edPronto').onclick = fecharEditor
 $('edFechar').onclick = fecharEditor
 $('editor').addEventListener('click', (ev) => { if (ev.target === $('editor')) fecharEditor() })

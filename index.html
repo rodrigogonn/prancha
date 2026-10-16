@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Prancha · fotos na medida exata, prontas para recortar</title>
-  <meta name="description" content="Monte suas fotos no tamanho certo numa folha A4 (ou qualquer papel), com marcas de corte, e imprima na medida certinha.">
+  <meta name="description" content="Monte suas fotos no tamanho certo numa folha A4 (ou qualquer papel), com marcas de corte, e imprima na medida exata.">
   <meta name="theme-color" content="#1e1e1e">
   <link rel="icon" href="icone.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
@@ -14,11 +14,11 @@
   <link rel="stylesheet" href="estilo.css">
   <style id="estilo-pagina"></style>
 </head>
-<body>
+<body data-etapa="fotos">
 <div class="app">
   <header class="topo">
     <div class="marca">
-      <img src="icone.svg" alt="" width="32" height="32">
+      <img src="icone.svg" alt="" width="30" height="30">
       <div>
         <h1>Prancha</h1>
         <p>fotos na medida exata, prontas para recortar</p>
@@ -27,11 +27,80 @@
     <span class="resumo" id="resumo"></span>
   </header>
 
+  <!-- assistente: fotos → tamanho → prancha -->
+  <main class="assistente" id="wizard">
+    <div class="wz-cartao">
+      <ol class="wz-trilha">
+        <li><span>1</span>Fotos</li>
+        <li><span>2</span>Tamanho</li>
+        <li><span>3</span>Prancha</li>
+      </ol>
+
+      <section id="wzFotos">
+        <h2 id="wzTitulo1">Quais fotos você quer imprimir?</h2>
+        <button class="soltar" id="wzEscolher">
+          <span class="soltar-ico">＋</span>
+          <b>Escolher fotos</b>
+          <small class="so-mouse">ou arraste as fotos para cá</small>
+          <small class="so-toque">da galeria ou da câmera</small>
+        </button>
+        <p class="dica">Pode escolher várias de uma vez. Elas ficam só no seu aparelho.</p>
+      </section>
+
+      <section id="wzTamanho" hidden>
+        <h2>De que tamanho?</h2>
+        <div class="wz-thumbs" id="wzThumbs"></div>
+        <p class="dica" id="wzQtd"></p>
+
+        <label class="wz-rotulo">Medida de cada foto</label>
+        <div class="wz-medida">
+          <input type="text" inputmode="decimal" id="wzW" aria-label="largura em cm">
+          <span>×</span>
+          <input type="text" inputmode="decimal" id="wzH" aria-label="altura em cm">
+          <span class="un">cm</span>
+          <button class="btn icone" id="wzInverter" title="trocar largura e altura">⇄</button>
+        </div>
+        <p class="dica">3 × 4 é foto de documento; 10 × 15 é a foto de álbum.</p>
+
+        <label class="wz-rotulo">Cópias de cada foto</label>
+        <div class="wz-copias">
+          <span class="qtd grande"><button id="wzMenos" aria-label="menos">−</button><span id="wzCopias">1</span><button id="wzMais" aria-label="mais">+</button></span>
+          <label class="check em-linha"><input type="checkbox" id="wzEncher"><span>Encher a folha</span></label>
+        </div>
+
+        <div id="wzPapelBloco">
+          <label class="wz-rotulo">Papel</label>
+          <div class="wz-papel">
+            <select id="wzPapel" aria-label="papel"></select>
+            <div class="seg" role="group" aria-label="posição do papel">
+              <button id="wzEmPe"><i class="ico-folha pe"></i>Em pé</button>
+              <button id="wzDeitado"><i class="ico-folha deitado"></i>Deitado</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="wz-conta" id="wzConta"></p>
+        <div class="wz-botoes">
+          <button class="btn" id="wzVoltar">← Fotos</button>
+          <button class="btn primario grande" id="wzMontar">Montar a prancha →</button>
+        </div>
+      </section>
+
+      <button class="link wz-cancelar" id="wzCancelar" hidden>cancelar e voltar para a prancha</button>
+    </div>
+  </main>
+
   <main class="corpo">
     <aside class="painel">
       <section class="passo">
-        <h2><span class="num">1</span>Papel</h2>
-        <div class="chips" id="papeis"></div>
+        <h2>Fotos e tamanhos</h2>
+        <div id="grupos"></div>
+        <button class="btn largo" id="outroTamanho">+ Outro tamanho</button>
+      </section>
+
+      <section class="passo">
+        <h2>Papel</h2>
+        <select id="papel" aria-label="papel"></select>
         <div class="linha custom" id="papelCustom" hidden>
           <input type="text" inputmode="decimal" id="papelW" aria-label="largura do papel em cm"> <span>×</span>
           <input type="text" inputmode="decimal" id="papelH" aria-label="altura do papel em cm"> <span class="un">cm</span>
@@ -42,23 +111,12 @@
         </div>
       </section>
 
-      <section class="passo">
-        <h2><span class="num">2</span>Tamanho das fotos</h2>
-        <div id="grupos"></div>
-        <details class="mais-tamanhos" open>
-          <summary>+ outro tamanho</summary>
-          <div class="chips" id="presets"></div>
-        </details>
-      </section>
-
-      <section class="passo">
-        <h2><span class="num">3</span>Espaço entre as fotos</h2>
-        <div class="faixa"><input type="range" id="espaco" min="0" max="15" step="0.5" aria-label="espaço entre as fotos"><span class="val" id="espacoVal"></span></div>
-        <p class="dica">4 mm é o bastante para a tesoura passar. <button class="link" id="espacoSug">voltar para 4 mm</button></p>
-      </section>
-
       <details class="passo ajustes">
-        <summary><span class="num">✂</span>Mais ajustes</summary>
+        <summary>Mais ajustes</summary>
+        <div class="rotulo"><span>Espaço entre as fotos</span><button class="link" id="espacoSug">voltar para 4 mm</button></div>
+        <div class="faixa"><input type="range" id="espaco" min="0" max="15" step="0.5" aria-label="espaço entre as fotos"><span class="val" id="espacoVal"></span></div>
+        <p class="dica">4 mm é o bastante para a tesoura passar.</p>
+
         <div class="rotulo"><span>Margem do papel</span><button class="link" id="margemSug">voltar para 5 mm</button></div>
         <div class="faixa"><input type="range" id="margem" min="0" max="25" step="0.5" aria-label="margem do papel"><span class="val" id="margemVal"></span></div>
         <p class="dica">Quase toda impressora deixa uma borda branca; 5 mm evita foto cortada.</p>
@@ -70,7 +128,7 @@
           <button data-v="nada">Nada</button>
         </div>
         <label class="check"><input type="checkbox" id="sangria">
-          <span>Sangria de 1 mm<small>A foto passa um tiquinho da linha: se a tesoura desviar, não sobra filete branco.</small></span></label>
+          <span>Sangria de 1 mm<small>A foto passa um pouco da linha: se a tesoura desviar, não sobra filete branco.</small></span></label>
         <label class="check"><input type="checkbox" id="girarFoto">
           <span>Quadro no formato da foto<small>Foto deitada num tamanho em pé ganha o quadro deitado (10 × 15 vira 15 × 10).</small></span></label>
         <label class="check"><input type="checkbox" id="girar">
@@ -84,7 +142,7 @@
     <section class="previa" id="previa">
       <div class="barra-previa">
         <button class="btn pequeno" id="virar"><i class="ico-folha pe" id="virarIco"></i>Virar o papel</button>
-        <button class="btn pequeno" id="addFotos">📷 Pôr fotos</button>
+        <button class="btn pequeno" id="addFotos">+ Fotos</button>
       </div>
       <div class="avisos" id="avisos"></div>
       <div class="folhas" id="folhas"></div>
@@ -92,7 +150,7 @@
   </main>
 
   <footer class="acoes">
-    <button class="btn primario" id="btnImprimir">🖨️ Imprimir</button>
+    <button class="btn primario" id="btnImprimir">Imprimir</button>
     <button class="btn" id="btnPdf"><span class="so-largo">Baixar </span>PDF</button>
     <button class="btn" id="btnPng"><span class="so-largo">Baixar </span>imagem</button>
     <span class="dica">Na impressora, escolha <b>tamanho real</b> (100%), nunca "ajustar à página".</span>
@@ -115,8 +173,7 @@
       <button class="btn pequeno" id="edPreencher">Preencher</button>
       <button class="btn pequeno" id="edInteira">Foto inteira</button>
       <button class="btn pequeno" id="edTrocar">Trocar foto</button>
-      <button class="btn pequeno" id="edRepetir">Repetir nos vazios</button>
-      <button class="btn pequeno perigo" id="edTirar">Tirar a foto</button>
+      <button class="btn pequeno perigo" id="edTirar">Tirar da prancha</button>
     </div>
     <div class="ed-fim"><button class="btn primario" id="edPronto">Pronto</button></div>
   </div>
