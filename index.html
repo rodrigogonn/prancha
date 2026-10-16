@@ -61,18 +61,15 @@
         <button class="btn largo" id="outroTamanho">+ Outro tamanho</button>
       </section>
 
-      <section class="passo">
-        <h2>Papel</h2>
+      <details class="passo ajustes">
+        <summary>Mais ajustes</summary>
+        <div class="rotulo"><span>Papel</span></div>
         <div class="papeis" data-papeis></div>
         <div class="linha custom" id="papelCustom" hidden>
           <input type="text" inputmode="decimal" id="papelW" aria-label="largura do papel em cm"> <span>×</span>
           <input type="text" inputmode="decimal" id="papelH" aria-label="altura do papel em cm"> <span class="un">cm</span>
         </div>
-      </section>
-
-      <details class="passo ajustes">
-        <summary>Mais ajustes</summary>
-        <div class="rotulo"><span>Espaço entre fotos</span><button class="link" id="espacoSug" title="voltar para 4 mm">4 mm</button></div>
+        <div class="rotulo sep"><span>Espaço entre fotos</span><button class="link" id="espacoSug" title="voltar para 4 mm">4 mm</button></div>
         <div class="faixa"><input type="range" id="espaco" min="0" max="15" step="0.5" aria-label="espaço entre as fotos"><span class="val" id="espacoVal"></span></div>
         <div class="rotulo"><span>Margem</span><button class="link" id="margemSug" title="voltar para 5 mm">5 mm</button></div>
         <div class="faixa"><input type="range" id="margem" min="0" max="25" step="0.5" aria-label="margem do papel"><span class="val" id="margemVal"></span></div>

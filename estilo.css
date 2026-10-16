@@ -386,3 +386,5 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
 
 .papeis { grid-template-columns: repeat(6, 1fr); gap: 3px; }
 .papel { height: 52px; padding: 4px 0 5px; font-size: 10.5px; }
+
+.rotulo.sep { margin-top: 16px; }
