@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Medidinha · fotos na medida certinha</title>
+  <meta name="description" content="Monte suas fotos no tamanho certo numa folha A4 (ou qualquer papel), com marcas de corte, e imprima na medida certinha.">
+  <meta name="theme-color" content="#fff6ee">
+  <link rel="icon" href="icone.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="estilo.css">
+  <style id="estilo-pagina"></style>
+</head>
+<body>
+<div class="app">
+  <header class="topo">
+    <div class="marca">
+      <img src="icone.svg" alt="" width="38" height="38">
+      <div>
+        <h1>Medidinha</h1>
+        <p>fotos na medida certinha</p>
+      </div>
+    </div>
+    <span class="resumo" id="resumo"></span>
+  </header>
+
+  <main class="corpo">
+    <aside class="painel">
+      <section class="passo">
+        <h2><span class="num">1</span>Papel</h2>
+        <div class="chips" id="papeis"></div>
+        <div class="linha custom" id="papelCustom" hidden>
+          <input type="text" inputmode="decimal" id="papelW" aria-label="largura do papel em cm"> <span>×</span>
+          <input type="text" inputmode="decimal" id="papelH" aria-label="altura do papel em cm"> <span class="un">cm</span>
+        </div>
+        <div class="seg" role="group" aria-label="posição do papel">
+          <button id="emPe"><i class="ico-folha pe"></i>Em pé</button>
+          <button id="deitado"><i class="ico-folha deitado"></i>Deitado</button>
+        </div>
+      </section>
+
+      <section class="passo">
+        <h2><span class="num">2</span>Tamanho das fotos</h2>
+        <div id="grupos"></div>
+        <details class="mais-tamanhos" open>
+          <summary>+ outro tamanho</summary>
+          <div class="chips" id="presets"></div>
+        </details>
+      </section>
+
+      <section class="passo">
+        <h2><span class="num">3</span>Espaço entre as fotos</h2>
+        <div class="faixa"><input type="range" id="espaco" min="0" max="15" step="0.5" aria-label="espaço entre as fotos"><span class="val" id="espacoVal"></span></div>
+        <p class="dica">4 mm é o bastante para a tesoura passar. <button class="link" id="espacoSug">voltar para 4 mm</button></p>
+      </section>
+
+      <details class="passo ajustes">
+        <summary><span class="num">✂</span>Mais ajustes</summary>
+        <div class="rotulo"><span>Margem do papel</span><button class="link" id="margemSug">voltar para 5 mm</button></div>
+        <div class="faixa"><input type="range" id="margem" min="0" max="25" step="0.5" aria-label="margem do papel"><span class="val" id="margemVal"></span></div>
+        <p class="dica">Quase toda impressora deixa uma borda branca; 5 mm evita foto cortada.</p>
+
+        <div class="rotulo"><span>Guias para recortar</span></div>
+        <div class="seg" id="guias">
+          <button data-v="cantos">Marcas nos cantos</button>
+          <button data-v="contorno">Contorno</button>
+          <button data-v="nada">Nada</button>
+        </div>
+        <label class="check"><input type="checkbox" id="sangria">
+          <span>Sangria de 1 mm<small>A foto passa um tiquinho da linha: se a tesoura desviar, não sobra filete branco.</small></span></label>
+        <label class="check"><input type="checkbox" id="girarFoto">
+          <span>Quadro no formato da foto<small>Foto deitada num tamanho em pé ganha o quadro deitado (10 × 15 vira 15 × 10).</small></span></label>
+        <label class="check"><input type="checkbox" id="girar">
+          <span>Girar para economizar papel<small>Só gira os quadros quando isso gasta menos folhas.</small></span></label>
+        <label class="check"><input type="checkbox" id="centralizar">
+          <span>Centralizar na largura<small>Normalmente as fotos começam no canto de cima, à esquerda.</small></span></label>
+        <button class="btn pequeno fantasma" id="limpar">Começar do zero</button>
+      </details>
+    </aside>
+
+    <section class="previa" id="previa">
+      <div class="barra-previa">
+        <button class="btn pequeno" id="virar"><i class="ico-folha pe" id="virarIco"></i>Virar o papel</button>
+        <button class="btn pequeno" id="addFotos">📷 Pôr fotos</button>
+      </div>
+      <div class="avisos" id="avisos"></div>
+      <div class="folhas" id="folhas"></div>
+    </section>
+  </main>
+
+  <footer class="acoes">
+    <button class="btn primario" id="btnImprimir">🖨️ Imprimir</button>
+    <button class="btn" id="btnPdf"><span class="so-largo">Baixar </span>PDF</button>
+    <button class="btn" id="btnPng"><span class="so-largo">Baixar </span>imagem</button>
+    <span class="dica">Na impressora, escolha <b>tamanho real</b> (100%), nunca "ajustar à página".</span>
+  </footer>
+</div>
+
+<div class="modal" id="editor" hidden>
+  <div class="editor">
+    <div class="ed-topo"><b>Ajustar a foto</b><span id="edTam"></span><button class="btn icone" id="edFechar" aria-label="fechar">✕</button></div>
+    <canvas id="edCanvas"></canvas>
+    <div class="ed-zoom"><span>−</span><input type="range" id="edZoom" min="0" max="1" step="0.001" aria-label="zoom"><span>+</span></div>
+    <p class="dica">Arraste para mover. Roda do mouse ou pinça para aproximar. O que fica dentro da moldura é o que sai.</p>
+    <div class="ed-botoes">
+      <button class="btn pequeno" id="edGirar">↻ Girar a foto</button>
+      <button class="btn pequeno" id="edVirar">Deitar o quadro</button>
+      <button class="btn pequeno" id="edPreencher">Preencher</button>
+      <button class="btn pequeno" id="edInteira">Foto inteira</button>
+      <button class="btn pequeno" id="edTrocar">Trocar foto</button>
+      <button class="btn pequeno" id="edRepetir">Repetir nos vazios</button>
+      <button class="btn pequeno perigo" id="edTirar">Tirar a foto</button>
+    </div>
+    <div class="ed-fim"><button class="btn primario" id="edPronto">Pronto</button></div>
+  </div>
+</div>
+
+<div class="ocupado" id="ocupado" hidden><div class="caixinha"><i class="giro"></i><span id="ocupadoTxt">Preparando…</span></div></div>
+<div class="toast" id="toast" role="status"></div>
+<div id="impressao"></div>
+<input type="file" id="arquivo" accept="image/*" multiple hidden>
+<script src="app.js"></script>
+</body>
+</html>
