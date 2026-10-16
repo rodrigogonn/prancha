@@ -2,14 +2,14 @@
 
 // ---------- dados fixos ----------
 const PAPEIS = [
-  ['A4', 'A4 · 21 × 29,7 cm', 210, 297],
-  ['A5', 'A5 · 14,8 × 21 cm', 148, 210],
-  ['A3', 'A3 · 29,7 × 42 cm', 297, 420],
-  ['carta', 'Carta · 21,6 × 27,9 cm', 215.9, 279.4],
-  ['oficio', 'Ofício · 21,6 × 33 cm', 216, 330],
-  ['foto10x15', 'Papel foto 10 × 15 cm', 100, 150],
-  ['foto13x18', 'Papel foto 13 × 18 cm', 130, 180],
-  ['custom', 'Outro tamanho…', 0, 0],
+  ['A4', 'A4', 210, 297],
+  ['A5', 'A5', 148, 210],
+  ['A3', 'A3', 297, 420],
+  ['carta', 'Carta', 215.9, 279.4],
+  ['oficio', 'Ofício', 216, 330],
+  ['foto10x15', '10×15', 100, 150],
+  ['foto13x18', '13×18', 130, 180],
+  ['custom', 'Outro', 0, 0],
 ]
 const ESPACO_SUG = 4, MARGEM_SUG = 5, SANGRIA = 1
 
@@ -374,13 +374,12 @@ function render() {
   $('resumo').textContent = `${nomePapel()} ${state.deitado ? 'deitado' : 'em pé'} · ${total} ${total === 1 ? 'foto' : 'fotos'} · ${n} ${n > 1 ? 'folhas' : 'folha'}`
   const av = []
   for (const g of L.naoCabe) av.push(['alerta', `${cm(g.w)} × ${cm(g.h)} cm não cabe nesse papel. Vire o papel ou diminua a margem.`])
-  if (!state.dicaVista) av.push(['', toque() ? 'Toque numa foto para ajustar o recorte.' : 'Clique numa foto para ajustar o recorte. Arraste uma sobre a outra para trocar de lugar.'])
   $('avisos').innerHTML = av.map(([c, t]) => `<div class="${c}">${t}</div>`).join('')
   for (const id of ['btnImprimir', 'btnPdf', 'btnPng']) $(id).disabled = !total
+  $('vazio').hidden = total > 0
   renderGrupos(L)
   salvar()
 }
-const toque = () => matchMedia('(pointer: coarse)').matches
 function nomePapel() {
   if (state.papel === 'custom') return `${cm(state.papelW)} × ${cm(state.papelH)} cm`
   return ({ foto10x15: 'Foto 10 × 15', foto13x18: 'Foto 13 × 18', carta: 'Carta', oficio: 'Ofício' })[state.papel] || state.papel
@@ -511,37 +510,47 @@ function urlDe(id) {
   return i.url
 }
 
-// ---------- assistente ----------
+// ---------- assistente (só no celular) ----------
+const celular = () => matchMedia('(max-width: 860px)').matches
+const grupoVazio = (w = state.novo.w, h = state.novo.h) => ({ id: uid(), w, h, fotos: [], copias: 1, extra: 0 })
+// No computador não há passo a passo: a prancha abre direto, com um tamanho vazio esperando fotos.
+function ajustarModo() {
+  if (celular()) {
+    state.grupos = state.grupos.filter(g => g.fotos.length)
+    if (state.etapa === 'prancha' && !state.grupos.length) state.etapa = 'fotos'
+  } else {
+    if (state.etapa !== 'prancha') {
+      if (state.novo.fotos.length) montarDoAssistente(true)
+      state.etapa = 'prancha'
+    }
+    if (!state.grupos.length) state.grupos.push(grupoVazio())
+  }
+}
 function mostrarEtapa() {
+  ajustarModo()
   const e = state.etapa
   document.body.dataset.etapa = e
   if (e === 'prancha') return
   const adicionando = state.grupos.length > 0
-  document.querySelectorAll('.wz-trilha li').forEach((li, i) => {
-    li.classList.toggle('feito', (e === 'tamanho' && i === 0))
-    li.classList.toggle('agora', (e === 'fotos' && i === 0) || (e === 'tamanho' && i === 1))
-  })
+  document.querySelectorAll('.wz-trilha li').forEach((li, i) => li.classList.toggle('feito', i <= (e === 'tamanho' ? 1 : 0)))
   $('wzFotos').hidden = e !== 'fotos'
   $('wzTamanho').hidden = e !== 'tamanho'
   $('wzCancelar').hidden = !adicionando
-  $('wzTitulo1').textContent = adicionando ? 'Quais fotos vão nesse outro tamanho?' : 'Quais fotos você quer imprimir?'
   if (e !== 'tamanho') return
   const n = state.novo
   $('wzThumbs').innerHTML = n.fotos.map((id, i) => `<span class="thumb"><img src="${urlDe(id)}" alt=""><button data-i="${i}" aria-label="tirar esta foto">✕</button></span>`).join('') +
     '<button class="thumb mais" id="wzMaisFotos" aria-label="mais fotos">+</button>'
-  $('wzQtd').textContent = `${n.fotos.length} ${n.fotos.length > 1 ? 'fotos escolhidas' : 'foto escolhida'}`
   for (const k of ['w', 'h']) { const inp = $(k === 'w' ? 'wzW' : 'wzH'); if (document.activeElement !== inp) inp.value = cm(n[k]) }
   $('wzCopias').textContent = n.copias
   $('wzEncher').checked = n.encher
   $('wzPapelBloco').hidden = adicionando
   const cabe = Math.max(cabem(n.w, n.h), state.girar ? cabem(n.h, n.w) : 0)
   const totalNovo = n.fotos.length * n.copias
-  $('wzConta').innerHTML = !cabe ? `<span class="aviso">${cm(n.w)} × ${cm(n.h)} cm não cabe no papel ${nomePapel()}.</span>`
-    : n.encher ? `A folha vai ser completada com cópias. Cabem <b>${cabe}</b> numa folha ${nomePapel()}.`
-      : `<b>${totalNovo}</b> ${totalNovo > 1 ? 'fotos' : 'foto'} na prancha · cabem <b>${cabe}</b> numa folha ${nomePapel()}.`
+  $('wzConta').innerHTML = !cabe ? `<span class="aviso">Não cabe nesse papel</span>`
+    : `<b>${n.encher ? cabe : totalNovo}</b> ${n.encher || totalNovo > 1 ? 'fotos' : 'foto'} · cabem ${cabe} por folha`
   $('wzMontar').disabled = !cabe
 }
-function montarDoAssistente() {
+function montarDoAssistente(semRender) {
   const n = state.novo
   const g = { id: uid(), w: n.w, h: n.h, fotos: [], copias: n.copias, extra: 0 }
   g.fotos = n.fotos.map(id => ({ img: id, crop: null, vira: viraPadrao(imgs.get(id), g) }))
@@ -549,6 +558,7 @@ function montarDoAssistente() {
   state.ativo = g.id
   state.novo = { ...estadoInicial().novo, w: n.w, h: n.h }
   state.etapa = 'prancha'
+  if (semRender) return
   if (n.encher) { render(); encher(g, true) }
   render()
 }
@@ -565,6 +575,7 @@ function ligarAssistente() {
     const inp = $(id)
     inp.addEventListener('input', () => { const v = lerCm(inp.value); if (v && v >= 5 && v <= 2000) { state.novo[k] = v; mostrarEtapa() } })
     inp.addEventListener('change', () => render())
+    inp.addEventListener('focus', () => inp.select())
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur() })
   }
   $('wzInverter').onclick = () => { const n = state.novo; [n.w, n.h] = [n.h, n.w]; render() }
@@ -572,13 +583,18 @@ function ligarAssistente() {
   $('wzMais').onclick = () => { state.novo.copias = Math.min(99, state.novo.copias + 1); render() }
   $('wzEncher').onchange = () => { state.novo.encher = $('wzEncher').checked; render() }
   $('wzVoltar').onclick = () => { state.etapa = 'fotos'; render() }
-  $('wzMontar').onclick = montarDoAssistente
+  $('wzMontar').onclick = () => montarDoAssistente()
   $('wzCancelar').onclick = () => { state.novo.fotos = []; state.etapa = 'prancha'; render() }
 }
 
 // ---------- painel ----------
+// no "change" de um campo o foco ainda está saindo dele: o painel não pode ser refeito nessa hora
+let adiarPainel = false
 function renderGrupos(L) {
   const box = $('grupos')
+  // quem está digitando uma medida não pode perder o foco: o painel se redesenha quando ele sair
+  if (adiarPainel || (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) { box.dataset.pendente = '1'; return }
+  delete box.dataset.pendente
   box.innerHTML = ''
   state.grupos.forEach((g, gi) => {
     const el = document.createElement('div')
@@ -601,9 +617,9 @@ function renderGrupos(L) {
       <div class="g2">
         <span class="rot-qtd">Cópias</span>
         <span class="qtd"><button data-a="menos" aria-label="menos">−</button><span>${g.copias}</span><button data-a="mais" aria-label="mais">+</button></span>
-        <button class="btn pequeno" data-a="encher">Encher a folha</button>
+        <button class="btn pequeno" data-a="encher" title="completar a folha com cópias">Encher folha</button>
       </div>
-      <div class="info">${cap ? `<b>${na}</b> ${na > 1 ? 'fotos' : 'foto'} na prancha · cabem <b>${cap}</b> por folha` : '<span class="aviso">Não cabe nesse papel</span>'}</div>`
+      ${cap ? '' : '<div class="info aviso">Não cabe nesse papel</div>'}`
     el.addEventListener('click', (ev) => {
       if (state.ativo !== g.id && state.grupos.length > 1) { state.ativo = g.id; if (!ev.target.closest('button,input')) render() }
     })
@@ -611,9 +627,11 @@ function renderGrupos(L) {
       const aplicar = () => {
         const v = lerCm(inp.value)
         if (v && v >= 5 && v <= 2000) { g[inp.dataset.k] = v; g.fotos.forEach(f => limitarSeTem(f, g)) }
-        render()
+        adiarPainel = true
+        try { render() } finally { adiarPainel = false }
       }
       inp.addEventListener('change', aplicar)
+      inp.addEventListener('focus', () => inp.select())
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur() })
     })
     el.querySelectorAll('button[data-a]').forEach(bt => bt.addEventListener('click', () => acaoGrupo(g, bt.dataset.a)))
@@ -626,6 +644,10 @@ function renderGrupos(L) {
     box.append(el)
   })
 }
+$('grupos').addEventListener('focusout', () => setTimeout(() => {
+  const box = $('grupos')
+  if (box.dataset.pendente && !box.contains(document.activeElement) && ultimoL) renderGrupos(ultimoL)
+}, 0))
 function limitarSeTem(f, g) {
   const i = imgs.get(f.img)
   if (i && f.crop) limitarCrop(f.crop, i, ...dimsQ(g, f))
@@ -638,10 +660,9 @@ function acaoGrupo(g, a) {
   else if (a === 'fotos') return escolherArquivos({ modo: 'grupo', g })
   else if (a === 'inverter') { [g.w, g.h] = [g.h, g.w]; g.fotos.forEach(f => limitarSeTem(f, g)) }
   else if (a === 'remover') {
-    if (!confirm(`Tirar o tamanho ${cm(g.w)} × ${cm(g.h)} cm e as fotos dele?`)) return
+    if (g.fotos.length && !confirm(`Tirar o tamanho ${cm(g.w)} × ${cm(g.h)} cm e as fotos dele?`)) return
     state.grupos = state.grupos.filter(x => x !== g)
     state.ativo = null
-    if (!state.grupos.length) state.etapa = 'fotos'
   }
   render()
 }
@@ -659,32 +680,46 @@ function encher(g, calado) {
   if (!calado) toast(depois > antes ? `Folha completa: ${depois} fotos de ${cm(g.w)} × ${cm(g.h)} cm.` : 'A folha já está cheia.')
 }
 
-function preencherPapeis(sel) { sel.innerHTML = PAPEIS.map(p => `<option value="${p[0]}">${p[1]}</option>`).join('') }
+// Papel por ícone: o desenho de cada um é proporcional ao tamanho de verdade (A3 maior, 10×15 menor).
+function renderPapeis() {
+  const k = 30 / 420
+  const html = PAPEIS.map(([id, nome, w, h]) => {
+    const [iw, ih] = w ? [Math.max(7, w * k), Math.max(10, h * k)] : [13, 18]
+    return `<button class="papel" data-p="${id}" title="${w ? `${nome} · ${cm(w)} × ${cm(h)} cm` : 'outro tamanho'}"><i class="${w ? '' : 'livre'}" style="width:${iw.toFixed(0)}px;height:${ih.toFixed(0)}px"></i><span>${nome}</span></button>`
+  }).join('') + `<span class="orient"><button data-o="0" title="em pé"><i class="ico-folha pe"></i></button><button data-o="1" title="deitado"><i class="ico-folha deitado"></i></button></span>`
+  document.querySelectorAll('[data-papeis]').forEach(el => { el.innerHTML = html })
+}
 function escolherPapel(v) {
   const p = PAPEIS.find(x => x[0] === v)
   state.papel = p[0]
   if (p[0] !== 'custom') { state.papelW = p[2]; state.papelH = p[3] }
   sincronizarPainel(); render()
 }
+function deitar(v) { state.deitado = v; sincronizarPainel(); render() }
 function montarPainel() {
-  preencherPapeis($('papel')); preencherPapeis($('wzPapel'))
-  $('papel').onchange = () => escolherPapel($('papel').value)
-  $('wzPapel').onchange = () => escolherPapel($('wzPapel').value)
+  renderPapeis()
+  document.querySelectorAll('[data-papeis]').forEach(el => el.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (!b) return
+    if (b.dataset.p) escolherPapel(b.dataset.p)
+    else deitar(b.dataset.o === '1')
+  }))
   for (const k of ['papelW', 'papelH']) $(k).addEventListener('change', () => {
     const v = lerCm($(k).value); if (v && v >= 20 && v <= 3000) state[k] = v
     sincronizarPainel(); render()
   })
-  const deitar = (v) => { state.deitado = v; sincronizarPainel(); render() }
   $('virar').onclick = () => deitar(!state.deitado)
-  $('emPe').onclick = () => deitar(false); $('deitado').onclick = () => deitar(true)
-  $('wzEmPe').onclick = () => deitar(false); $('wzDeitado').onclick = () => deitar(true)
   $('espaco').oninput = () => { state.espaco = +$('espaco').value; sincronizarPainel(); render() }
   $('margem').oninput = () => { state.margem = +$('margem').value; sincronizarPainel(); render() }
   $('espacoSug').onclick = () => { state.espaco = ESPACO_SUG; sincronizarPainel(); render() }
   $('margemSug').onclick = () => { state.margem = MARGEM_SUG; sincronizarPainel(); render() }
   $('guias').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; state.guias = b.dataset.v; sincronizarPainel(); render() })
   for (const k of ['sangria', 'girar', 'girarFoto', 'centralizar']) $(k).onchange = () => { state[k] = $(k).checked; render() }
-  $('outroTamanho').onclick = () => { state.novo.fotos = []; state.etapa = 'fotos'; render(); window.scrollTo(0, 0) }
+  $('outroTamanho').onclick = () => {
+    if (celular()) { state.novo.fotos = []; state.etapa = 'fotos'; render(); window.scrollTo(0, 0); return }
+    const g = grupoVazio(); state.grupos.push(g); state.ativo = g.id; render()
+    $('grupos').lastElementChild?.querySelector('input')?.select()
+  }
+  $('vazio').onclick = () => escolherArquivos({ modo: 'grupo', g: grupoAtivo() })
   $('addFotos').onclick = () => escolherArquivos({ modo: 'grupo', g: grupoAtivo() })
   $('limpar').onclick = () => {
     if (!confirm('Apagar tudo e começar do zero?')) return
@@ -697,12 +732,10 @@ function montarPainel() {
   ligarAssistente()
 }
 function sincronizarPainel() {
-  $('papel').value = state.papel; $('wzPapel').value = state.papel
+  document.querySelectorAll('[data-papeis] .papel').forEach(b => b.classList.toggle('on', b.dataset.p === state.papel))
+  document.querySelectorAll('[data-papeis] [data-o]').forEach(b => b.classList.toggle('on', (b.dataset.o === '1') === state.deitado))
   $('papelCustom').hidden = state.papel !== 'custom'
   $('papelW').value = cm(state.papelW); $('papelH').value = cm(state.papelH)
-  for (const [a, b] of [['emPe', 'deitado'], ['wzEmPe', 'wzDeitado']]) {
-    $(a).classList.toggle('on', !state.deitado); $(b).classList.toggle('on', state.deitado)
-  }
   $('virarIco').className = 'ico-folha ' + (state.deitado ? 'deitado' : 'pe')
   $('espaco').value = state.espaco; $('espacoVal').textContent = `${String(state.espaco).replace('.', ',')} mm`
   $('margem').value = state.margem; $('margemVal').textContent = `${String(state.margem).replace('.', ',')} mm`
@@ -884,8 +917,7 @@ $('edTrocar').onclick = () => { const f = ed.it.q; fecharEditor(); escolherArqui
 $('edTirar').onclick = () => {
   const f = ed.it.q, g = grupoDe(f)
   g.fotos = g.fotos.filter(x => x !== f); g.extra = 0
-  if (!g.fotos.length) state.grupos = state.grupos.filter(x => x !== g)
-  if (!state.grupos.length) state.etapa = 'fotos'
+  if (!g.fotos.length && (celular() || state.grupos.length > 1)) state.grupos = state.grupos.filter(x => x !== g)
   fecharEditor()
 }
 $('edPronto').onclick = fecharEditor
@@ -956,12 +988,13 @@ async function baixarPng() {
       baixar(await comDpi(png, dpi), nomeArquivo('png', i, fs.length))
     }
   } finally { ocupado(false) }
-  toast(`Imagem em ${Math.round(dpiPara(L))} dpi: imprimindo em tamanho real, as medidas saem certas.`)
+  toast('Na impressora: tamanho real (100%)')
 }
 
 async function baixarPdf() {
   const L = montar(), fs = folhasComFoto(L)
   if (!fs.length) return
+  toast('Na impressora: tamanho real (100%)')
   ocupado(true, 'Gerando o PDF…')
   try {
     const paginas = []

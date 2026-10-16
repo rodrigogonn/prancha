@@ -333,3 +333,53 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
   #impressao img:last-child { break-after: auto; page-break-after: auto; }
 }
 .grupo .g2 { flex-wrap: nowrap; white-space: nowrap; }
+
+/* ---- versão limpa ---- */
+.marca h1 { font-size: 14.5px; }
+.papeis { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
+.papel {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px;
+  width: 52px; height: 58px; padding: 5px 2px 6px; border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--texto2); font-size: 11px;
+}
+.papel i { display: block; border: 1.5px solid currentColor; border-radius: 2px; background: rgba(255, 255, 255, .04); }
+.papel i.livre { border-style: dashed; }
+.papel:hover { background: var(--campo); color: var(--texto); }
+.papel.on { background: var(--acento-fundo); border-color: var(--acento); color: #fff; }
+.papel.on i { border-color: var(--acento); background: rgba(47, 155, 255, .18); }
+.orient { display: inline-flex; flex-direction: column; gap: 4px; margin-left: auto; }
+.orient button {
+  width: 34px; flex: 1; display: grid; place-items: center; border-radius: 6px; border: 1px solid var(--borda);
+  background: var(--campo); color: var(--texto2);
+}
+.orient button:hover { color: var(--texto); }
+.orient button.on { border-color: var(--acento); color: #fff; background: var(--acento-fundo); }
+.previa { position: relative; }
+.vazio {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 34px;
+  background: rgba(37, 37, 38, .92); border: 1.5px dashed #55555c; border-radius: 12px; color: var(--texto);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+}
+.vazio:hover, body.soltando .vazio { border-color: var(--acento); }
+.vazio b { font-size: 15px; font-weight: 600; }
+.vazio small { color: var(--texto2); font-size: 12px; }
+.wz-trilha li { height: 3px; padding: 0; border: 0; background: var(--borda); border-radius: 2px; }
+.wz-trilha li.feito { background: var(--acento); }
+.wz-trilha { margin-bottom: 20px; }
+.assistente h2 { margin-bottom: 14px; }
+.ed-topo b { margin-right: auto; font-variant-numeric: tabular-nums; }
+.ed-botoes #edPronto { margin-left: auto; }
+.grupo .info.aviso { color: var(--perigo); }
+@media (max-width: 860px) {
+  .papel { width: calc((100% - 50px) / 4 - 3px); }
+  .orient { flex-direction: row; width: 100%; margin: 4px 0 0; }
+  .orient button { height: 36px; }
+  .vazio { display: none !important; }
+}
+
+.papeis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.papel { width: auto; }
+.orient { grid-column: 1 / -1; flex-direction: row; width: 100%; margin: 4px 0 0; }
+.orient button { height: 30px; }
+@media (max-width: 860px) { .papel { width: auto; } .orient button { height: 36px; } }
