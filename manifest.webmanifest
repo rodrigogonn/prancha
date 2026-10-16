@@ -1,10 +1,10 @@
 {
-  "name": "Medidinha",
-  "short_name": "Medidinha",
-  "description": "Fotos na medida certinha, prontas para imprimir e recortar.",
+  "name": "Tamanho Real",
+  "short_name": "Tamanho Real",
+  "description": "Fotos impressas na medida exata, prontas para recortar.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#fff6ee",
-  "theme_color": "#fff6ee",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
   "icons": [{ "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

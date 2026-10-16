@@ -1,6 +1,6 @@
-# Medidinha
+# Tamanho Real
 
-Fotos na medida certinha. Escolha o papel e o tamanho das fotos, coloque as imagens, ajuste o
+Fotos impressas na medida exata. Escolha o papel e o tamanho das fotos, coloque as imagens, ajuste o
 recorte, e imprima (ou baixe o PDF) em tamanho real, com marcas de corte para a tesoura.
 
 - Qualquer papel (A4, A5, A3, Carta, Ofício, papel foto ou medida própria), em pé ou deitado

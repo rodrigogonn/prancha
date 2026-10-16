@@ -40,7 +40,7 @@ const imgs = new Map() // id -> { blob, prev (desenhável), w, h }
 let selecionado = null // quadro selecionado (objeto)
 
 // ---------- armazenamento (opcional: o app funciona sem) ----------
-const CHAVE = 'medidinha'
+const CHAVE = 'tamanho-real'
 let dbp = null
 function db() {
   if (!dbp) dbp = new Promise((res, rej) => {
@@ -141,20 +141,32 @@ async function importar(file) {
 
 // ---------- recorte ----------
 function rot4(c) { return (((c && c.r) || 0) % 4 + 4) % 4 }
+const totalGraus = (c) => rot4(c) * 90 + ((c && c.a) || 0)
+// Guarda o giro como quartos de volta (r) + ajuste fino (a, entre -45 e 45 graus).
+function definirGraus(c, g) {
+  g = ((g % 360) + 540) % 360 - 180
+  const q = Math.round(g / 90)
+  c.r = ((q % 4) + 4) % 4
+  c.a = Math.round((g - q * 90) * 100) / 100
+}
+// O quadro visto no eixo da foto (qw × qh) define a escala que cobre tudo, mesmo girada.
 function medidasCrop(f, lw, lh, c) {
-  const r = rot4(c)
-  const iw = r % 2 ? f.h : f.w, ih = r % 2 ? f.w : f.h
-  const cover = Math.max(lw / iw, lh / ih)
-  const minS = Math.min(lw / iw, lh / ih) / cover
-  return { iw, ih, cover, minS }
+  const t = totalGraus(c) * Math.PI / 180, co = Math.abs(Math.cos(t)), si = Math.abs(Math.sin(t))
+  const qw = lw * co + lh * si, qh = lw * si + lh * co
+  const cover = Math.max(qw / f.w, qh / f.h)
+  const bw = f.w * co + f.h * si, bh = f.w * si + f.h * co
+  const minS = Math.min(lw / bw, lh / bh) / cover
+  return { t, qw, qh, cover, minS }
 }
 function limitarCrop(c, f, lw, lh) {
   const m = medidasCrop(f, lw, lh, c)
   c.s = Math.min(8, Math.max(m.minS, c.s))
-  const dw = m.iw * m.cover * c.s, dh = m.ih * m.cover * c.s
-  const mx = Math.abs(dw - lw) / 2 / lw, my = Math.abs(dh - lh) / 2 / lh
-  c.x = Math.min(mx, Math.max(-mx, c.x))
-  c.y = Math.min(my, Math.max(-my, c.y))
+  const sc = m.cover * c.s
+  const fx = Math.abs(f.w * sc - m.qw) / 2, fy = Math.abs(f.h * sc - m.qh) / 2
+  const cs = Math.cos(m.t), sn = Math.sin(m.t), ox = c.x * lw, oy = c.y * lh
+  const u = Math.min(fx, Math.max(-fx, ox * cs + oy * sn)), v = Math.min(fy, Math.max(-fy, -ox * sn + oy * cs))
+  c.x = (u * cs - v * sn) / lw
+  c.y = (u * sn + v * cs) / lh
   return c
 }
 function cropPadrao() { return { s: 1, x: 0, y: 0, r: 0 } }
@@ -166,7 +178,7 @@ function desenharFoto(ctx, src, f, lw, lh, c) {
   const sc = m.cover * c.s
   ctx.save()
   ctx.translate(c.x * lw, c.y * lh)
-  ctx.rotate(rot4(c) * Math.PI / 2)
+  ctx.rotate(m.t)
   ctx.drawImage(src, -f.w * sc / 2, -f.h * sc / 2, f.w * sc, f.h * sc)
   ctx.restore()
 }
@@ -238,7 +250,7 @@ function desenharFolha(ctx, folha, L, k, modo, fontes) {
   ctx.fillRect(0, 0, L.W, L.H)
   if (modo === 'tela' && state.margem > 0) {
     ctx.save()
-    ctx.strokeStyle = 'rgba(63,182,142,.45)'; ctx.lineWidth = 0.3; ctx.setLineDash([2, 1.5])
+    ctx.strokeStyle = 'rgba(80,140,210,.35)'; ctx.lineWidth = 0.3; ctx.setLineDash([2, 1.5])
     ctx.strokeRect(state.margem, state.margem, L.W - 2 * state.margem, L.H - 2 * state.margem)
     ctx.restore()
   }
@@ -254,14 +266,14 @@ function desenharFolha(ctx, folha, L, k, modo, fontes) {
       desenharFoto(ctx, f.src, f, lw, lh, it.q.crop || cropPadrao(f, lw, lh))
       ctx.restore()
     } else if (modo === 'tela') {
-      ctx.fillStyle = '#fff3ea'; ctx.fillRect(-lw / 2, -lh / 2, lw, lh)
-      ctx.strokeStyle = '#f5b28e'; ctx.lineWidth = 0.4; ctx.setLineDash([1.6, 1.2])
+      ctx.fillStyle = '#eef2f7'; ctx.fillRect(-lw / 2, -lh / 2, lw, lh)
+      ctx.strokeStyle = '#9db2c9'; ctx.lineWidth = 0.4; ctx.setLineDash([1.6, 1.2])
       ctx.strokeRect(-lw / 2, -lh / 2, lw, lh); ctx.setLineDash([])
       const fs = Math.max(2.4, Math.min(lw, lh) * 0.12)
-      ctx.fillStyle = '#e08455'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.font = `800 ${fs * 1.6}px Nunito, system-ui, sans-serif`
+      ctx.fillStyle = '#6f8399'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.font = `800 ${fs * 1.6}px Inter, system-ui, sans-serif`
       ctx.fillText('+', 0, -fs * 0.7)
-      ctx.font = `800 ${fs}px Nunito, system-ui, sans-serif`
+      ctx.font = `800 ${fs}px Inter, system-ui, sans-serif`
       ctx.fillText(`${cm(lw)} × ${cm(lh)}`, 0, fs * 0.9)
     }
     ctx.restore()
@@ -270,15 +282,15 @@ function desenharFolha(ctx, folha, L, k, modo, fontes) {
   if (modo === 'tela' && selecionado) {
     const it = folha.itens.find(i => i.q === selecionado)
     if (it) {
-      ctx.strokeStyle = '#ff7a45'; ctx.lineWidth = Math.max(0.8, 1.6 / k * 2)
+      ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = Math.max(0.8, 1.6 / k * 2)
       ctx.strokeRect(it.x - 0.6, it.y - 0.6, it.w + 1.2, it.h + 1.2)
     }
   }
   if (modo === 'tela' && arraste && arraste.alvo) {
     const it = folha.itens.find(i => i.q === arraste.alvo)
     if (it) {
-      ctx.fillStyle = 'rgba(255,122,69,.2)'; ctx.fillRect(it.x, it.y, it.w, it.h)
-      ctx.strokeStyle = '#ff7a45'; ctx.lineWidth = 0.8; ctx.strokeRect(it.x, it.y, it.w, it.h)
+      ctx.fillStyle = 'rgba(47,155,255,.2)'; ctx.fillRect(it.x, it.y, it.w, it.h)
+      ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = 0.8; ctx.strokeRect(it.x, it.y, it.w, it.h)
     }
   }
   ctx.restore()
@@ -348,8 +360,8 @@ function render() {
   $('resumo').textContent = `${nomePapel} ${state.deitado ? 'deitado' : 'em pé'} · ${comFoto} de ${total} com foto · ${L.folhas.length || 1} ${L.folhas.length > 1 ? 'folhas' : 'folha'}`
   const av = []
   for (const g of L.naoCabe) av.push(['alerta', `${cm(g.w)} × ${cm(g.h)} cm não cabe nesse papel. Tente virar o papel ou diminuir a margem.`])
-  if (total && !comFoto) av.push(['', '👆 Toque num quadrinho para pôr a foto, ou arraste as fotos para cima da folha.'])
-  else if (comFoto < total) av.push(['', `${total - comFoto} ${total - comFoto > 1 ? 'quadrinhos vazios ficam' : 'quadrinho vazio fica'} de fora da impressão.`])
+  if (total && !comFoto) av.push(['', 'Clique num quadro para pôr a foto, ou arraste as fotos para cima da folha.'])
+  else if (comFoto < total) av.push(['', `${total - comFoto} ${total - comFoto > 1 ? 'quadros vazios ficam' : 'quadro vazio fica'} de fora da impressão.`])
   $('avisos').innerHTML = av.map(([c, t]) => `<div class="${c}">${t}</div>`).join('')
   const temFoto = comFoto > 0
   for (const id of ['btnImprimir', 'btnPdf', 'btnPng']) $(id).disabled = !temFoto
@@ -647,7 +659,7 @@ function desenharEditor() {
   const { c, r, dpr, lw, lh, k } = geomEditor()
   const ctx = c.getContext('2d')
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.fillStyle = '#3a2c24'; ctx.fillRect(0, 0, r.width, r.height)
+  ctx.fillStyle = '#161616'; ctx.fillRect(0, 0, r.width, r.height)
   ctx.translate(r.width / 2, r.height / 2); ctx.scale(k, k)
   const crop = ed.it.q.crop
   ctx.globalAlpha = 0.3
@@ -658,10 +670,19 @@ function desenharEditor() {
   desenharFoto(ctx, ed.f.prev, ed.f, lw, lh, crop)
   ctx.restore()
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / k; ctx.strokeRect(-lw / 2, -lh / 2, lw, lh)
-  // terços, ajuda a enquadrar rosto
-  ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1 / k; ctx.beginPath()
-  for (const t of [1 / 3, 2 / 3]) { ctx.moveTo(-lw / 2 + lw * t, -lh / 2); ctx.lineTo(-lw / 2 + lw * t, lh / 2); ctx.moveTo(-lw / 2, -lh / 2 + lh * t); ctx.lineTo(lw / 2, -lh / 2 + lh * t) }
+  // terços para enquadrar; girando, grade fina para endireitar o horizonte
+  const n = ed.girando ? 8 : 3
+  ctx.strokeStyle = ed.girando ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.35)'; ctx.lineWidth = 1 / k; ctx.beginPath()
+  for (let i = 1; i < n; i++) { const t = i / n; ctx.moveTo(-lw / 2 + lw * t, -lh / 2); ctx.lineTo(-lw / 2 + lw * t, lh / 2); ctx.moveTo(-lw / 2, -lh / 2 + lh * t); ctx.lineTo(lw / 2, -lh / 2 + lh * t) }
   ctx.stroke()
+  if (ed.girando) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const txt = `${String(Math.round(totalGraus(crop) * 10) / 10).replace('.', ',')}°`
+    ctx.font = '600 15px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    const w = ctx.measureText(txt).width + 22
+    ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.beginPath(); ctx.roundRect(r.width / 2 - w / 2, 12, w, 28, 6); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.fillText(txt, r.width / 2, 26)
+  }
 }
 function mudarCrop(fn) {
   const { lw, lh } = geomEditor()
@@ -677,16 +698,66 @@ function sincronizarZoom() {
   if (!ed) return
   const [a, b] = faixaZoom()
   $('edZoom').value = b > a ? (Math.log(ed.it.q.crop.s) - a) / (b - a) : 0
+  const fino = ed.it.q.crop.a || 0
+  $('edAngulo').value = fino
+  $('edAnguloVal').textContent = `${String(Math.round(fino * 10) / 10).replace('.', ',')}°`
 }
+// Gira a foto em torno do centro do quadro: o deslocamento gira junto, senão a foto "foge".
+function girarPara(c, graus) {
+  const [lw, lh] = dimsQ(ed.it.g, ed.it.q)
+  const d = (graus - totalGraus(c)) * Math.PI / 180, cs = Math.cos(d), sn = Math.sin(d)
+  const ox = c.x * lw, oy = c.y * lh
+  c.x = (ox * cs - oy * sn) / lw; c.y = (ox * sn + oy * cs) / lh
+  definirGraus(c, graus)
+}
+$('edAngulo').addEventListener('input', () => {
+  mudarCrop(c => girarPara(c, rot4(c) * 90 + +$('edAngulo').value))
+})
+$('edAnguloVal').onclick = () => mudarCrop(c => girarPara(c, rot4(c) * 90))
 $('edZoom').addEventListener('input', () => {
   const [a, b] = faixaZoom()
   mudarCrop(c => { c.s = Math.exp(a + (b - a) * +$('edZoom').value) })
 })
 const edC = $('edCanvas')
-edC.addEventListener('pointerdown', (ev) => { if (!ed) return; edC.setPointerCapture(ev.pointerId); ed.ponteiros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }) })
+// Ponto fora da moldura = girar (como no Photoshop); dentro = mover.
+function foraDaMoldura(ev) {
+  const { r, lw, lh, k } = geomEditor()
+  const x = ev.clientX - r.left - r.width / 2, y = ev.clientY - r.top - r.height / 2
+  return Math.abs(x) > lw * k / 2 + 4 || Math.abs(y) > lh * k / 2 + 4
+}
+function anguloNoCentro(ev) {
+  const r = edC.getBoundingClientRect()
+  return Math.atan2(ev.clientY - r.top - r.height / 2, ev.clientX - r.left - r.width / 2) * 180 / Math.PI
+}
+const angDedos = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI
+function grausComImã(g, shift) {
+  if (shift) return Math.round(g / 15) * 15
+  const q = Math.round(g / 90) * 90
+  return Math.abs(g - q) < 1.2 ? q : g
+}
+edC.addEventListener('pointerdown', (ev) => {
+  if (!ed) return
+  edC.setPointerCapture(ev.pointerId)
+  ed.ponteiros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
+  if (ed.ponteiros.size === 1 && foraDaMoldura(ev)) {
+    ed.giro = { base: totalGraus(ed.it.q.crop), ini: anguloNoCentro(ev) }
+    ed.girando = true; desenharEditor()
+  } else ed.giro = null
+})
 edC.addEventListener('pointermove', (ev) => {
-  if (!ed || !ed.ponteiros.has(ev.pointerId)) return
+  if (!ed) return
+  if (!ed.ponteiros.has(ev.pointerId)) {
+    if (ev.pointerType === 'mouse') edC.classList.toggle('girar', foraDaMoldura(ev))
+    return
+  }
   const ps = ed.ponteiros
+  if (ed.giro && ps.size === 1) {
+    let d = anguloNoCentro(ev) - ed.giro.ini
+    d = ((d + 540) % 360) - 180
+    ed.giro.ini += d; ed.giro.base += d
+    mudarCrop(c => girarPara(c, grausComImã(ed.giro.base, ev.shiftKey)))
+    return
+  }
   const antes = [...ps.values()].map(p => ({ ...p }))
   ps.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
   const depois = [...ps.values()]
@@ -698,20 +769,34 @@ edC.addEventListener('pointermove', (ev) => {
       const d0 = Math.hypot(antes[0].x - antes[1].x, antes[0].y - antes[1].y)
       const d1 = Math.hypot(depois[0].x - depois[1].x, depois[0].y - depois[1].y)
       if (d0 > 0) { const s0 = c.s; c.s *= d1 / d0; const q = c.s / s0; c.x *= q; c.y *= q }
+      // dois dedos torcendo = girar
+      let dg = angDedos(depois[0], depois[1]) - angDedos(antes[0], antes[1])
+      dg = ((dg + 540) % 360) - 180
+      if (Math.abs(dg) > 0.05) {
+        ed.torcao = (ed.torcao ?? totalGraus(c)) + dg
+        girarPara(c, grausComImã(ed.torcao, false))
+        ed.girando = true
+      }
     }
     c.x += (m1.x - m0.x) / k / lw
     c.y += (m1.y - m0.y) / k / lh
   })
 })
-const soltar = (ev) => { if (ed) ed.ponteiros.delete(ev.pointerId) }
+const soltar = (ev) => {
+  if (!ed) return
+  ed.ponteiros.delete(ev.pointerId)
+  if (ed.ponteiros.size < 2) ed.torcao = null
+  if (!ed.ponteiros.size && (ed.giro || ed.girando)) { ed.giro = null; ed.girando = false; desenharEditor() }
+}
 edC.addEventListener('pointerup', soltar)
 edC.addEventListener('pointercancel', soltar)
+edC.addEventListener('pointerleave', (ev) => { if (ev.pointerType === 'mouse' && !ed?.ponteiros.size) edC.classList.remove('girar') })
 edC.addEventListener('wheel', (ev) => {
   if (!ed) return
   ev.preventDefault()
   mudarCrop(c => { const s0 = c.s; c.s *= Math.exp(-ev.deltaY * 0.0015); const q = c.s / s0; c.x *= q; c.y *= q })
 }, { passive: false })
-$('edGirar').onclick = () => mudarCrop(c => { c.r = (rot4(c) + 1) % 4; c.s = 1; c.x = 0; c.y = 0 })
+$('edGirar').onclick = () => mudarCrop(c => { girarPara(c, totalGraus(c) + 90) })
 $('edVirar').onclick = () => { ed.it.q.vira = !ed.it.q.vira; rotuloEditor(); mudarCrop(c => { c.s = 1; c.x = 0; c.y = 0 }); render() }
 $('edPreencher').onclick = () => mudarCrop(c => { c.s = 1; c.x = 0; c.y = 0 })
 $('edInteira').onclick = () => mudarCrop(c => { c.s = 0; c.x = 0; c.y = 0 })
@@ -758,7 +843,7 @@ function baixar(blob, nome) {
   document.body.append(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(a.href), 60000)
 }
-const nomeArquivo = (ext, i, n) => `medidinha-${state.papel === 'custom' ? 'papel' : state.papel}${n > 1 ? '-folha' + (i + 1) : ''}.${ext}`
+const nomeArquivo = (ext, i, n) => `tamanho-real-${state.papel === 'custom' ? 'papel' : state.papel}${n > 1 ? '-folha' + (i + 1) : ''}.${ext}`
 
 async function imprimir() {
   const L = montar(), fs = folhasComFoto(L)
