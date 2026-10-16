@@ -383,3 +383,6 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
 .orient { grid-column: 1 / -1; flex-direction: row; width: 100%; margin: 4px 0 0; }
 .orient button { height: 30px; }
 @media (max-width: 860px) { .papel { width: auto; } .orient button { height: 36px; } }
+
+.papeis { grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.papel { height: 52px; padding: 4px 0 5px; font-size: 10.5px; }

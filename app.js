@@ -6,9 +6,7 @@ const PAPEIS = [
   ['A5', 'A5', 148, 210],
   ['A3', 'A3', 297, 420],
   ['carta', 'Carta', 215.9, 279.4],
-  ['oficio', 'Ofício', 216, 330],
   ['foto10x15', '10×15', 100, 150],
-  ['foto13x18', '13×18', 130, 180],
   ['custom', 'Outro', 0, 0],
 ]
 const ESPACO_SUG = 4, MARGEM_SUG = 5, SANGRIA = 1
@@ -345,7 +343,8 @@ function render() {
   const estreito = window.innerWidth <= 860
   const cw = prev.clientWidth - (estreito ? 24 : 48)
   const ch = prev.clientHeight - prev.querySelector('.barra-previa').offsetHeight - $('avisos').offsetHeight - 90
-  let dw = estreito ? Math.min(cw, window.innerHeight * 0.62 * L.W / L.H) : Math.min(cw, ch * L.W / L.H)
+  // no celular a folha ocupa a largura: medir pela altura fazia ela mudar quando a barra do navegador some na rolagem
+  let dw = estreito ? cw : Math.min(cw, ch * L.W / L.H)
   dw = Math.max(200, Math.min(dw, 900))
   const dh = dw * L.H / L.W
   const n = Math.max(1, L.folhas.length)
@@ -541,14 +540,9 @@ function mostrarEtapa() {
   $('wzThumbs').innerHTML = n.fotos.map((id, i) => `<span class="thumb"><img src="${urlDe(id)}" alt=""><button data-i="${i}" aria-label="tirar esta foto">✕</button></span>`).join('') +
     '<button class="thumb mais" id="wzMaisFotos" aria-label="mais fotos">+</button>'
   for (const k of ['w', 'h']) { const inp = $(k === 'w' ? 'wzW' : 'wzH'); if (document.activeElement !== inp) inp.value = cm(n[k]) }
-  $('wzCopias').textContent = n.copias
-  $('wzEncher').checked = n.encher
-  $('wzPapelBloco').hidden = adicionando
-  const cabe = Math.max(cabem(n.w, n.h), state.girar ? cabem(n.h, n.w) : 0)
-  const totalNovo = n.fotos.length * n.copias
-  $('wzConta').innerHTML = !cabe ? `<span class="aviso">Não cabe nesse papel</span>`
-    : `<b>${n.encher ? cabe : totalNovo}</b> ${n.encher || totalNovo > 1 ? 'fotos' : 'foto'} · cabem ${cabe} por folha`
+  const cabe = Math.max(cabem(n.w, n.h), cabem(n.h, n.w))
   $('wzMontar').disabled = !cabe
+  $('wzMontar').textContent = cabe ? 'Montar' : 'Não cabe no papel'
 }
 function montarDoAssistente(semRender) {
   const n = state.novo
@@ -579,9 +573,6 @@ function ligarAssistente() {
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur() })
   }
   $('wzInverter').onclick = () => { const n = state.novo; [n.w, n.h] = [n.h, n.w]; render() }
-  $('wzMenos').onclick = () => { state.novo.copias = Math.max(1, state.novo.copias - 1); render() }
-  $('wzMais').onclick = () => { state.novo.copias = Math.min(99, state.novo.copias + 1); render() }
-  $('wzEncher').onchange = () => { state.novo.encher = $('wzEncher').checked; render() }
   $('wzVoltar').onclick = () => { state.etapa = 'fotos'; render() }
   $('wzMontar').onclick = () => montarDoAssistente()
   $('wzCancelar').onclick = () => { state.novo.fotos = []; state.etapa = 'prancha'; render() }
@@ -686,7 +677,7 @@ function renderPapeis() {
   const html = PAPEIS.map(([id, nome, w, h]) => {
     const [iw, ih] = w ? [Math.max(7, w * k), Math.max(10, h * k)] : [13, 18]
     return `<button class="papel" data-p="${id}" title="${w ? `${nome} · ${cm(w)} × ${cm(h)} cm` : 'outro tamanho'}"><i class="${w ? '' : 'livre'}" style="width:${iw.toFixed(0)}px;height:${ih.toFixed(0)}px"></i><span>${nome}</span></button>`
-  }).join('') + `<span class="orient"><button data-o="0" title="em pé"><i class="ico-folha pe"></i></button><button data-o="1" title="deitado"><i class="ico-folha deitado"></i></button></span>`
+  }).join('')
   document.querySelectorAll('[data-papeis]').forEach(el => { el.innerHTML = html })
 }
 function escolherPapel(v) {
@@ -1060,7 +1051,17 @@ function toast(t) {
 }
 function ocupado(on, txt) { $('ocupado').hidden = !on; if (txt) $('ocupadoTxt').textContent = txt }
 let rz = null
-window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { render(); if (ed) desenharEditor() }, 80) })
+// No celular a barra do navegador some e volta ao rolar, mudando só a ALTURA: isso não redesenha a folha.
+let larguraAntes = window.innerWidth
+window.addEventListener('resize', () => {
+  clearTimeout(rz)
+  rz = setTimeout(() => {
+    if (ed) desenharEditor()
+    if (window.innerWidth === larguraAntes && window.innerWidth <= 860) return
+    larguraAntes = window.innerWidth
+    render()
+  }, 80)
+})
 
 ;(async () => {
   montarPainel()
