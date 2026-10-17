@@ -19,10 +19,24 @@
   <header class="topo">
     <div class="marca"><img src="icone.svg" alt="" width="26" height="26"><h1>Prancha</h1></div>
     <span class="resumo" id="resumo"></span>
+    <span class="hist">
+      <button class="btn icone" data-hist="desfazer" title="Desfazer (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4 3 7l3 3"/><path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H7"/></svg></button>
+      <button class="btn icone" data-hist="refazer" title="Refazer (Ctrl+Shift+Z)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m10 4 3 3-3 3"/><path d="M13 7H6.5a3.5 3.5 0 0 0 0 7H9"/></svg></button>
+    </span>
     <span class="zoom" id="zoom">
       <button class="btn icone" id="zoomMenos" title="diminuir (Ctrl + roda)">−</button>
       <button class="zoom-val" id="zoomVal" title="caber na tela">100%</button>
       <button class="btn icone" id="zoomMais" title="aumentar (Ctrl + roda)">+</button>
+    </span>
+    <span class="saida">
+      <button class="btn primario" id="topoImprimir" title="Imprimir (Ctrl+P) · na impressora, escolha tamanho real">Imprimir</button>
+      <span class="menu-pai">
+        <button class="btn" id="exportar" aria-haspopup="menu">Exportar <i class="seta"></i></button>
+        <span class="menu" id="exportarMenu" role="menu" hidden>
+          <button role="menuitem" id="mPdf">PDF</button>
+          <button role="menuitem" id="mPng">Imagem (PNG)</button>
+        </span>
+      </span>
     </span>
   </header>
 
@@ -115,6 +129,8 @@
     <div class="ed-topo"><b id="edTam"></b><button class="btn icone" id="edFechar" aria-label="fechar">✕</button></div>
     <canvas id="edCanvas"></canvas>
     <div class="ed-botoes">
+      <button class="btn icone" data-hist="desfazer" title="Desfazer (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4 3 7l3 3"/><path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H7"/></svg></button>
+      <button class="btn icone" data-hist="refazer" title="Refazer (Ctrl+Shift+Z)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m10 4 3 3-3 3"/><path d="M13 7H6.5a3.5 3.5 0 0 0 0 7H9"/></svg></button>
       <button class="btn pequeno" id="edGirar" title="girar 90°">↻ 90°</button>
       <button class="btn pequeno" id="edVirar">Deitar quadro</button>
       <button class="btn pequeno" id="edPreencher">Preencher</button>

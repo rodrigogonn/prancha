@@ -43,6 +43,7 @@ const chegando = new Set()
 function idsUsados() {
   const s = new Set([...state.novo.fotos, ...chegando])
   state.grupos.forEach(g => g.fotos.forEach(f => s.add(f.img)))
+  if (typeof hist !== 'undefined') for (const id of idsDoHistorico()) s.add(id)
   return s
 }
 const grupoDe = (f) => state.grupos.find(g => g.fotos.includes(f))
@@ -369,10 +370,11 @@ function render() {
   const av = []
   for (const g of L.naoCabe) av.push(['alerta', `${cm(g.w)} × ${cm(g.h)} cm não cabe nesse papel. Vire o papel ou diminua a margem.`])
   $('avisos').innerHTML = av.map(([c, t]) => `<div class="${c}">${t}</div>`).join('')
-  for (const id of ['btnImprimir', 'btnPdf', 'btnPng']) $(id).disabled = !total
+  for (const id of ['btnImprimir', 'btnPdf', 'btnPng', 'topoImprimir', 'exportar']) $(id).disabled = !total
   $('vazio').hidden = total > 0
   renderGrupos(L)
   salvar()
+  registrar()
 }
 // Zoom só da vista (não muda a impressão): 1 = a folha cabe na tela.
 let zoomVista = 1
@@ -738,6 +740,16 @@ function montarPainel() {
     sincronizarPainel(); render()
   }
   $('btnImprimir').onclick = imprimir
+  $('topoImprimir').onclick = imprimir
+  const menu = $('exportarMenu')
+  $('exportar').onclick = (ev) => { ev.stopPropagation(); menu.hidden = !menu.hidden }
+  document.addEventListener('click', () => { menu.hidden = true })
+  $('mPdf').onclick = baixarPdf
+  $('mPng').onclick = baixarPng
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') menu.hidden = true
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'p' && state.etapa === 'prancha') { ev.preventDefault(); imprimir() }
+  })
   $('btnPdf').onclick = baixarPdf
   $('btnPng').onclick = baixarPng
   ligarAssistente()
@@ -757,19 +769,39 @@ function sincronizarPainel() {
 }
 
 // ---------- editor de recorte ----------
+// Como a transformação livre do Photoshop: a foto inteira aparece com uma caixa e alças.
+// Alça = redimensionar (o canto oposto fica parado) · dentro da foto = mover · fora = girar.
 let ed = null
 function abrirEditor(it) {
   const f = imgs.get(it.q.img)
   if (!f) return
   if (!it.q.crop) it.q.crop = cropPadrao()
-  state.dicaVista = true
-  ed = { it, f, ponteiros: new Map() }
+  ed = { it, f, ponteiros: new Map(), vista: null }
   rotuloEditor()
   $('editor').hidden = false
   requestAnimationFrame(() => { desenharEditor() })
 }
 function rotuloEditor() { const [lw, lh] = dimsQ(ed.it.g, ed.it.q); $('edTam').textContent = `${cm(lw)} × ${cm(lh)} cm` }
-function fecharEditor() { $('editor').hidden = true; ed = null; render() }
+function fecharEditor() { $('editor').hidden = true; ed = null; registrar(); render() }
+
+// geometria da foto no quadro (mm, origem no centro do quadro)
+function caixaFoto() {
+  const [lw, lh] = dimsQ(ed.it.g, ed.it.q), c = ed.it.q.crop, m = medidasCrop(ed.f, lw, lh, c)
+  const sc = m.cover * c.s, hw = ed.f.w * sc / 2, hh = ed.f.h * sc / 2
+  const cs = Math.cos(m.t), sn = Math.sin(m.t), o = { x: c.x * lw, y: c.y * lh }
+  const canto = (sx, sy) => ({ x: o.x + sx * hw * cs - sy * hh * sn, y: o.y + sx * hw * sn + sy * hh * cs })
+  return { lw, lh, m, sc, hw, hh, cs, sn, o, cantos: [canto(-1, -1), canto(1, -1), canto(1, 1), canto(-1, 1)] }
+}
+// a vista mostra o quadro e a foto inteira; durante um gesto ela fica parada, senão a tela "foge" da mão
+function calcularVista(r) {
+  const b = caixaFoto()
+  const xs = [-b.lw / 2, b.lw / 2, ...b.cantos.map(p => p.x)], ys = [-b.lh / 2, b.lh / 2, ...b.cantos.map(p => p.y)]
+  const lim = (v, l) => Math.max(-l, Math.min(l, v))
+  const x0 = lim(Math.min(...xs), b.lw * 2.5), x1 = lim(Math.max(...xs), b.lw * 2.5)
+  const y0 = lim(Math.min(...ys), b.lh * 2.5), y1 = lim(Math.max(...ys), b.lh * 2.5)
+  const k = Math.min((r.width - 60) / (x1 - x0), (r.height - 60) / (y1 - y0))
+  return { k, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 }
+}
 function geomEditor() {
   const c = $('edCanvas'), r = c.getBoundingClientRect()
   const dpr = Math.min(2.5, window.devicePixelRatio || 1)
@@ -777,18 +809,21 @@ function geomEditor() {
     c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr)
   }
   const [lw, lh] = dimsQ(ed.it.g, ed.it.q)
-  const k = Math.min(r.width * 0.74 / lw, r.height * 0.8 / lh)
-  return { c, r, dpr, lw, lh, k }
+  const v = ed.vista || calcularVista(r)
+  const tela = (p) => ({ x: r.width / 2 + (p.x - v.cx) * v.k, y: r.height / 2 + (p.y - v.cy) * v.k })
+  const mm = (ev) => ({ x: v.cx + (ev.clientX - r.left - r.width / 2) / v.k, y: v.cy + (ev.clientY - r.top - r.height / 2) / v.k })
+  return { c, r, dpr, lw, lh, k: v.k, v, tela, mm }
 }
 function desenharEditor() {
   if (!ed) return
-  const { c, r, dpr, lw, lh, k } = geomEditor()
+  const { c, r, dpr, lw, lh, k, v, tela } = geomEditor()
   const ctx = c.getContext('2d')
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.fillStyle = '#161616'; ctx.fillRect(0, 0, r.width, r.height)
-  ctx.translate(r.width / 2, r.height / 2); ctx.scale(k, k)
+  ctx.save()
+  ctx.translate(r.width / 2 - v.cx * k, r.height / 2 - v.cy * k); ctx.scale(k, k)
   const crop = ed.it.q.crop
-  ctx.globalAlpha = 0.3
+  ctx.globalAlpha = 0.35
   desenharFoto(ctx, ed.f.prev, ed.f, lw, lh, crop)
   ctx.globalAlpha = 1
   ctx.save(); ctx.beginPath(); ctx.rect(-lw / 2, -lh / 2, lw, lh); ctx.clip()
@@ -796,25 +831,34 @@ function desenharEditor() {
   desenharFoto(ctx, ed.f.prev, ed.f, lw, lh, crop)
   ctx.restore()
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / k; ctx.strokeRect(-lw / 2, -lh / 2, lw, lh)
-  // terços para enquadrar; girando, grade fina para endireitar o horizonte
   const n = ed.girando ? 8 : 3
-  ctx.strokeStyle = ed.girando ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.35)'; ctx.lineWidth = 1 / k; ctx.beginPath()
+  ctx.strokeStyle = ed.girando ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.3)'; ctx.lineWidth = 1 / k; ctx.beginPath()
   for (let i = 1; i < n; i++) { const t = i / n; ctx.moveTo(-lw / 2 + lw * t, -lh / 2); ctx.lineTo(-lw / 2 + lw * t, lh / 2); ctx.moveTo(-lw / 2, -lh / 2 + lh * t); ctx.lineTo(lw / 2, -lh / 2 + lh * t) }
   ctx.stroke()
+  ctx.restore()
+  // caixa da foto com as alças
+  const cs = caixaFoto().cantos.map(tela)
+  ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = 1.2; ctx.beginPath()
+  cs.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.stroke()
+  for (const p of cs) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(p.x - 5, p.y - 5, 10, 10)
+    ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x - 5, p.y - 5, 10, 10)
+  }
   if (ed.girando) {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const txt = `${String(Math.round(totalGraus(crop) * 10) / 10).replace('.', ',')}°`
-    ctx.font = '600 15px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    const w = ctx.measureText(txt).width + 22
-    ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.beginPath(); ctx.roundRect(r.width / 2 - w / 2, 12, w, 28, 6); ctx.fill()
-    ctx.fillStyle = '#fff'; ctx.fillText(txt, r.width / 2, 26)
+    ctx.font = '600 14px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    const w = ctx.measureText(txt).width + 20
+    ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.beginPath(); ctx.roundRect(r.width / 2 - w / 2, 12, w, 26, 6); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.fillText(txt, r.width / 2, 25)
   }
 }
+let regEditor = null
 function mudarCrop(fn) {
-  const { lw, lh } = geomEditor()
+  const [lw, lh] = dimsQ(ed.it.g, ed.it.q)
   fn(ed.it.q.crop)
   limitarCrop(ed.it.q.crop, ed.f, lw, lh)
   desenharEditor()
+  clearTimeout(regEditor); regEditor = setTimeout(registrar, 350)
 }
 // Gira a foto em torno do centro do quadro: o deslocamento gira junto, senão a foto "foge".
 function girarPara(c, graus) {
@@ -825,15 +869,28 @@ function girarPara(c, graus) {
   definirGraus(c, graus)
 }
 const edC = $('edCanvas')
-// Ponto fora da moldura = girar (como no Photoshop); dentro = mover.
-function foraDaMoldura(ev) {
-  const { r, lw, lh, k } = geomEditor()
-  const x = ev.clientX - r.left - r.width / 2, y = ev.clientY - r.top - r.height / 2
-  return Math.abs(x) > lw * k / 2 + 4 || Math.abs(y) > lh * k / 2 + 4
+// o que fica sob o ponteiro: uma alça (índice), a foto ('mover') ou o lado de fora ('girar')
+function alvoEm(ev) {
+  const g = geomEditor(), b = caixaFoto()
+  const px = ev.clientX - g.r.left, py = ev.clientY - g.r.top
+  const tol = ev.pointerType === 'mouse' ? 10 : 22
+  const i = b.cantos.map(g.tela).findIndex(p => Math.abs(p.x - px) <= tol && Math.abs(p.y - py) <= tol)
+  if (i >= 0) return { tipo: 'alca', i }
+  const p = g.mm(ev), dx = p.x - b.o.x, dy = p.y - b.o.y
+  const u = dx * b.cs + dy * b.sn, w = -dx * b.sn + dy * b.cs
+  return Math.abs(u) <= b.hw && Math.abs(w) <= b.hh ? { tipo: 'mover' } : { tipo: 'girar' }
+}
+function cursorPara(a) {
+  edC.classList.toggle('girar', a.tipo === 'girar')
+  if (a.tipo === 'alca') {
+    const g = geomEditor(), cs = caixaFoto().cantos.map(g.tela), p = cs[a.i], q = cs[(a.i + 2) % 4]
+    const ang = (Math.atan2(p.y - q.y, p.x - q.x) * 180 / Math.PI + 360) % 180
+    edC.style.cursor = ang < 22.5 || ang >= 157.5 ? 'ew-resize' : ang < 67.5 ? 'nwse-resize' : ang < 112.5 ? 'ns-resize' : 'nesw-resize'
+  } else edC.style.cursor = a.tipo === 'mover' ? 'move' : ''
 }
 function anguloNoCentro(ev) {
-  const r = edC.getBoundingClientRect()
-  return Math.atan2(ev.clientY - r.top - r.height / 2, ev.clientX - r.left - r.width / 2) * 180 / Math.PI
+  const g = geomEditor(), c = g.tela({ x: 0, y: 0 })
+  return Math.atan2(ev.clientY - g.r.top - c.y, ev.clientX - g.r.left - c.x) * 180 / Math.PI
 }
 const angDedos = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI
 function grausComImã(g, shift) {
@@ -845,23 +902,40 @@ edC.addEventListener('pointerdown', (ev) => {
   if (!ed) return
   edC.setPointerCapture(ev.pointerId)
   ed.ponteiros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
-  if (ed.ponteiros.size === 1 && foraDaMoldura(ev)) {
-    ed.giro = { base: totalGraus(ed.it.q.crop), ini: anguloNoCentro(ev) }
+  ed.vista = geomEditor().v
+  ed.gesto = null
+  if (ed.ponteiros.size !== 1) return
+  const a = alvoEm(ev)
+  if (a.tipo === 'girar') {
+    ed.gesto = { tipo: 'girar', base: totalGraus(ed.it.q.crop), ini: anguloNoCentro(ev) }
     ed.girando = true; desenharEditor()
-  } else ed.giro = null
+  } else if (a.tipo === 'alca') {
+    const b = caixaFoto(), A = b.cantos[(a.i + 2) % 4], P = b.cantos[a.i]
+    const diag = Math.hypot(P.x - A.x, P.y - A.y)
+    ed.gesto = { tipo: 'alca', A, dir: { x: (P.x - A.x) / diag, y: (P.y - A.y) / diag }, diag, s0: ed.it.q.crop.s }
+  } else ed.gesto = { tipo: 'mover' }
 })
 edC.addEventListener('pointermove', (ev) => {
   if (!ed) return
-  if (!ed.ponteiros.has(ev.pointerId)) {
-    if (ev.pointerType === 'mouse') edC.classList.toggle('girar', foraDaMoldura(ev))
+  if (!ed.ponteiros.has(ev.pointerId)) { if (ev.pointerType === 'mouse') cursorPara(alvoEm(ev)); return }
+  const ps = ed.ponteiros, gesto = ed.gesto
+  if (gesto && ps.size === 1 && gesto.tipo === 'girar') {
+    let d = anguloNoCentro(ev) - gesto.ini
+    d = ((d + 540) % 360) - 180
+    gesto.ini += d; gesto.base += d
+    mudarCrop(c => girarPara(c, grausComImã(gesto.base, ev.shiftKey)))
     return
   }
-  const ps = ed.ponteiros
-  if (ed.giro && ps.size === 1) {
-    let d = anguloNoCentro(ev) - ed.giro.ini
-    d = ((d + 540) % 360) - 180
-    ed.giro.ini += d; ed.giro.base += d
-    mudarCrop(c => girarPara(c, grausComImã(ed.giro.base, ev.shiftKey)))
+  if (gesto && ps.size === 1 && gesto.tipo === 'alca') {
+    // a foto cresce ao longo da diagonal: o canto oposto fica onde estava
+    const g = geomEditor(), p = g.mm(ev), [lw, lh] = [g.lw, g.lh]
+    const proj = Math.max(gesto.diag * 0.05, (p.x - gesto.A.x) * gesto.dir.x + (p.y - gesto.A.y) * gesto.dir.y)
+    const f = proj / gesto.diag
+    mudarCrop(c => {
+      c.s = gesto.s0 * f
+      c.x = (gesto.A.x + gesto.dir.x * proj / 2) / lw
+      c.y = (gesto.A.y + gesto.dir.y * proj / 2) / lh
+    })
     return
   }
   const antes = [...ps.values()].map(p => ({ ...p }))
@@ -875,7 +949,6 @@ edC.addEventListener('pointermove', (ev) => {
       const d0 = Math.hypot(antes[0].x - antes[1].x, antes[0].y - antes[1].y)
       const d1 = Math.hypot(depois[0].x - depois[1].x, depois[0].y - depois[1].y)
       if (d0 > 0) { const s0 = c.s; c.s *= d1 / d0; const q = c.s / s0; c.x *= q; c.y *= q }
-      // dois dedos torcendo = girar
       let dg = angDedos(depois[0], depois[1]) - angDedos(antes[0], antes[1])
       dg = ((dg + 540) % 360) - 180
       if (Math.abs(dg) > 0.05) {
@@ -892,11 +965,14 @@ const soltar = (ev) => {
   if (!ed) return
   ed.ponteiros.delete(ev.pointerId)
   if (ed.ponteiros.size < 2) ed.torcao = null
-  if (!ed.ponteiros.size && (ed.giro || ed.girando)) { ed.giro = null; ed.girando = false; desenharEditor() }
+  if (!ed.ponteiros.size) {
+    ed.gesto = null; ed.girando = false; ed.vista = null
+    desenharEditor(); registrar()
+  }
 }
 edC.addEventListener('pointerup', soltar)
 edC.addEventListener('pointercancel', soltar)
-edC.addEventListener('pointerleave', (ev) => { if (ev.pointerType === 'mouse' && !ed?.ponteiros.size) edC.classList.remove('girar') })
+edC.addEventListener('pointerleave', (ev) => { if (ev.pointerType === 'mouse' && !ed?.ponteiros.size) { edC.classList.remove('girar'); edC.style.cursor = '' } })
 edC.addEventListener('wheel', (ev) => {
   if (!ed) return
   ev.preventDefault()
@@ -916,7 +992,61 @@ $('edTirar').onclick = () => {
 $('edPronto').onclick = fecharEditor
 $('edFechar').onclick = fecharEditor
 $('editor').addEventListener('click', (ev) => { if (ev.target === $('editor')) fecharEditor() })
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && ed) fecharEditor() })
+
+// ---------- desfazer / refazer ----------
+// Cada estado é uma foto do `state` em JSON; as imagens ficam por id, então é barato.
+const hist = { atras: [], frente: [], ultimo: null }
+function registrar() {
+  const s = JSON.stringify(state)
+  if (hist.ultimo === null) { hist.ultimo = s; return botoesHist() }
+  if (s === hist.ultimo) return
+  hist.atras.push(hist.ultimo)
+  if (hist.atras.length > 80) hist.atras.shift()
+  hist.frente = []
+  hist.ultimo = s
+  botoesHist()
+}
+function idsDoHistorico() {
+  const s = new Set()
+  for (const j of [...hist.atras, ...hist.frente]) for (const m of j.matchAll(/"img":"(\w+)"/g)) s.add(m[1])
+  return s
+}
+function aplicarHist(json) {
+  let pos = null
+  if (ed) { const g = grupoDe(ed.it.q); pos = g && [state.grupos.indexOf(g), g.fotos.indexOf(ed.it.q)] }
+  state = JSON.parse(json)
+  selecionado = null
+  if (ed) {
+    const g = pos && state.grupos[pos[0]], q = g && g.fotos[pos[1]]
+    if (q && imgs.has(q.img)) {
+      if (!q.crop) q.crop = cropPadrao()
+      ed.it = { g, q }; ed.f = imgs.get(q.img); rotuloEditor(); desenharEditor()
+    } else { $('editor').hidden = true; ed = null }
+  }
+  sincronizarPainel(); render(); botoesHist()
+}
+function desfazer() {
+  clearTimeout(regEditor); registrar()
+  if (!hist.atras.length) return
+  hist.frente.push(hist.ultimo); hist.ultimo = hist.atras.pop(); aplicarHist(hist.ultimo)
+}
+function refazer() {
+  if (!hist.frente.length) return
+  hist.atras.push(hist.ultimo); hist.ultimo = hist.frente.pop(); aplicarHist(hist.ultimo)
+}
+function botoesHist() {
+  document.querySelectorAll('[data-hist=desfazer]').forEach(b => { b.disabled = !hist.atras.length })
+  document.querySelectorAll('[data-hist=refazer]').forEach(b => { b.disabled = !hist.frente.length })
+}
+document.querySelectorAll('[data-hist]').forEach(b => { b.onclick = () => (b.dataset.hist === 'desfazer' ? desfazer() : refazer()) })
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && ed) return fecharEditor()
+  const mod = ev.ctrlKey || ev.metaKey
+  if (!mod || ev.target.tagName === 'INPUT') return
+  const k = ev.key.toLowerCase()
+  if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); desfazer() }
+  else if ((k === 'z' && ev.shiftKey) || k === 'y') { ev.preventDefault(); refazer() }
+})
 
 // ---------- saída em tamanho real ----------
 // 300 dpi, limitado a ~16 MP por folha (teto de canvas do iPhone).

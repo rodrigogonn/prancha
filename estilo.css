@@ -411,3 +411,33 @@ details.passo[open] > summary::after { transform: translateY(2px) rotate(-135deg
 .folhas { min-width: 100%; width: max-content; margin: 0 auto; }
 body:not([data-etapa=prancha]) .zoom { display: none; }
 @media (max-width: 860px) { .zoom { display: none; } }
+
+/* topo de editor: desfazer, zoom, imprimir e exportar (no computador a barra de baixo some) */
+.topo { gap: 8px; }
+.hist { display: inline-flex; gap: 2px; margin-left: 6px; }
+.hist .btn.icone, .ed-botoes .btn.icone { width: 30px; min-height: 30px; background: transparent; border-color: transparent; color: var(--texto); }
+.hist .btn.icone:hover, .ed-botoes .btn.icone:hover { background: var(--campo); }
+.hist .btn.icone:disabled, .ed-botoes .btn.icone:disabled { opacity: .3; }
+.saida { display: inline-flex; gap: 6px; margin-left: 10px; }
+.saida .btn { min-height: 30px; padding: 4px 12px; }
+.menu-pai { position: relative; }
+.seta { display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); margin-left: 4px; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 170px; display: flex; flex-direction: column;
+  background: var(--painel); border: 1px solid var(--borda); border-radius: 8px; padding: 4px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+}
+.menu button { text-align: left; background: transparent; border: 0; border-radius: 5px; padding: 8px 10px; font-size: 13px; }
+.menu button:hover { background: var(--acento); color: #fff; }
+body:not([data-etapa=prancha]) .hist, body:not([data-etapa=prancha]) .saida { display: none; }
+@media (min-width: 861px) { .acoes { display: none; } }
+@media (max-width: 860px) { .saida { display: none; } .hist { margin-left: auto; } }
+
+/* editor grande: ocupa quase a tela toda */
+.editor { width: min(1400px, 96vw); height: min(980px, 94vh); max-height: none; }
+#edCanvas { flex: 1; height: auto; min-height: 0; }
+.ed-botoes { align-items: center; }
+@media (max-width: 860px) {
+  .editor { width: 100%; height: 100dvh; border-radius: 0; }
+  #edCanvas { height: auto; }
+  .modal { align-items: stretch; }
+}
