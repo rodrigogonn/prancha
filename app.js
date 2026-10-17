@@ -804,18 +804,11 @@ function caixaFoto() {
   const canto = (sx, sy) => ({ x: o.x + sx * hw * cs - sy * hh * sn, y: o.y + sx * hw * sn + sy * hh * cs })
   return { lw, lh, m, sc, hw, hh, cs, sn, o, cantos: [canto(-1, -1), canto(1, -1), canto(1, 1), canto(-1, 1)] }
 }
-// A vista fica sempre centrada no quadro. A escala é fixada ao abrir e só diminui (sem sair do
-// centro) quando uma alça ficaria fora da tela; reenquadrar a cada gesto fazia o quadro "andar".
-function escalaQueCabe(r, k0) {
-  const b = caixaFoto()
-  const ax = Math.min(Math.max(b.lw / 2, ...b.cantos.map(p => Math.abs(p.x))), b.lw * 2.5)
-  const ay = Math.min(Math.max(b.lh / 2, ...b.cantos.map(p => Math.abs(p.y))), b.lh * 2.5)
-  const k = Math.min((r.width / 2 - 24) / ax, (r.height / 2 - 24) / ay)
-  return k0 ? Math.min(k0, k) : k
-}
+// Vista fixa: o quadro fica no centro e sempre do mesmo tamanho (só depende do tamanho da tela).
+// Aumentar a foto não afasta a vista; as alças podem sair da tela e a roda do mouse traz de volta.
 function calcularVista(r) {
-  if (!ed.k || ed.kLarg !== r.width || ed.kAlt !== r.height) { ed.k = escalaQueCabe(r); ed.kLarg = r.width; ed.kAlt = r.height }
-  return { k: ed.k, cx: 0, cy: 0 }
+  const [lw, lh] = dimsQ(ed.it.g, ed.it.q)
+  return { k: Math.min(r.width * 0.6 / lw, r.height * 0.7 / lh), cx: 0, cy: 0 }
 }
 function geomEditor() {
   const c = $('edCanvas'), r = c.getBoundingClientRect()
@@ -982,8 +975,6 @@ const soltar = (ev) => {
   if (ed.ponteiros.size < 2) ed.torcao = null
   if (!ed.ponteiros.size) {
     ed.gesto = null; ed.girando = false; ed.vista = null
-    const r = edC.getBoundingClientRect()
-    ed.k = escalaQueCabe(r, ed.k)
     desenharEditor(); registrar()
   }
 }
