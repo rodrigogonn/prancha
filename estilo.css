@@ -369,7 +369,7 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
 .wz-trilha { margin-bottom: 20px; }
 .assistente h2 { margin-bottom: 14px; }
 .ed-topo b { margin-right: auto; font-variant-numeric: tabular-nums; }
-.ed-botoes #edCancelar { margin-left: auto; }
+
 .grupo .info.aviso { color: var(--perigo); }
 @media (max-width: 860px) {
   .papel { width: calc((100% - 50px) / 4 - 3px); }
@@ -440,4 +440,17 @@ body:not([data-etapa=prancha]) .hist, body:not([data-etapa=prancha]) .saida { di
   .editor { width: 100%; height: 100dvh; border-radius: 0; }
   #edCanvas { height: auto; }
   .modal { align-items: stretch; }
+}
+
+/* barra do editor: ferramentas à esquerda, Cancelar/Pronto à direita; no celular, grade alinhada */
+.ed-botoes { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
+.ed-ferramentas { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.ed-fim { display: flex; gap: 6px; margin-left: auto; }
+@media (max-width: 860px) {
+  .ed-botoes { flex-direction: column; align-items: stretch; gap: 8px; }
+  .ed-ferramentas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .ed-ferramentas .btn { width: 100%; min-height: 42px; padding: 0 4px; font-size: 13.5px; }
+  .ed-botoes .ed-ferramentas .btn.icone { width: 100%; min-height: 42px; background: var(--campo); border-color: var(--borda); }
+  .ed-fim { display: grid; grid-template-columns: 1fr 1fr; margin-left: 0; }
+  .ed-fim .btn { min-height: 46px; font-size: 15px; }
 }
