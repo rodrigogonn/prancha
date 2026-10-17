@@ -293,12 +293,6 @@ function desenharFolha(ctx, folha, L, k, modo, fontes) {
     ctx.restore()
   }
   desenharGuias(ctx, folha, b, modo, fontes)
-  if (modo === 'tela' && selecionado) {
-    for (const it of folha.itens.filter(i => i.q === selecionado)) {
-      ctx.strokeStyle = '#2f9bff'; ctx.lineWidth = Math.max(0.8, 1.6 / k * 2)
-      ctx.strokeRect(it.x - 0.6, it.y - 0.6, it.w + 1.2, it.h + 1.2)
-    }
-  }
   if (modo === 'tela' && arraste && arraste.alvo) {
     const it = folha.itens.find(i => i.q === arraste.alvo)
     if (it) {
@@ -604,7 +598,7 @@ function renderGrupos(L) {
         <button class="btn icone" data-a="inverter" title="trocar largura e altura">⇄</button>
         <button class="btn icone" data-a="remover" title="tirar este tamanho">✕</button>
       </div>
-      <div class="thumbs">${g.fotos.map((f, i) => `<button class="thumb${f === selecionado ? ' sel' : ''}" data-f="${i}" title="ajustar"><img src="${urlDe(f.img)}" alt=""></button>`).join('')}<button class="thumb mais" data-a="fotos" title="mais fotos neste tamanho">+</button></div>
+      <div class="thumbs">${g.fotos.map((f, i) => `<button class="thumb" data-f="${i}" title="ajustar"><img src="${urlDe(f.img)}" alt=""></button>`).join('')}<button class="thumb mais" data-a="fotos" title="mais fotos neste tamanho">+</button></div>
       <div class="g2">
         <span class="rot-qtd">Cópias</span>
         <span class="qtd"><button data-a="menos" aria-label="menos">−</button><span>${g.copias}</span><button data-a="mais" aria-label="mais">+</button></span>
@@ -746,7 +740,7 @@ function abrirEditor(it) {
   ed = { it, f, ponteiros: new Map() }
   rotuloEditor()
   $('editor').hidden = false
-  requestAnimationFrame(() => { desenharEditor(); sincronizarZoom() })
+  requestAnimationFrame(() => { desenharEditor() })
 }
 function rotuloEditor() { const [lw, lh] = dimsQ(ed.it.g, ed.it.q); $('edTam').textContent = `${cm(lw)} × ${cm(lh)} cm` }
 function fecharEditor() { $('editor').hidden = true; ed = null; render() }
@@ -794,19 +788,7 @@ function mudarCrop(fn) {
   const { lw, lh } = geomEditor()
   fn(ed.it.q.crop)
   limitarCrop(ed.it.q.crop, ed.f, lw, lh)
-  desenharEditor(); sincronizarZoom()
-}
-function faixaZoom() {
-  const m = medidasCrop(ed.f, ...dimsQ(ed.it.g, ed.it.q), ed.it.q.crop)
-  return [Math.log(m.minS), Math.log(8)]
-}
-function sincronizarZoom() {
-  if (!ed) return
-  const [a, b] = faixaZoom()
-  $('edZoom').value = b > a ? (Math.log(ed.it.q.crop.s) - a) / (b - a) : 0
-  const fino = ed.it.q.crop.a || 0
-  $('edAngulo').value = fino
-  $('edAnguloVal').textContent = `${String(Math.round(fino * 10) / 10).replace('.', ',')}°`
+  desenharEditor()
 }
 // Gira a foto em torno do centro do quadro: o deslocamento gira junto, senão a foto "foge".
 function girarPara(c, graus) {
@@ -816,14 +798,6 @@ function girarPara(c, graus) {
   c.x = (ox * cs - oy * sn) / lw; c.y = (ox * sn + oy * cs) / lh
   definirGraus(c, graus)
 }
-$('edAngulo').addEventListener('input', () => {
-  mudarCrop(c => girarPara(c, rot4(c) * 90 + +$('edAngulo').value))
-})
-$('edAnguloVal').onclick = () => mudarCrop(c => girarPara(c, rot4(c) * 90))
-$('edZoom').addEventListener('input', () => {
-  const [a, b] = faixaZoom()
-  mudarCrop(c => { c.s = Math.exp(a + (b - a) * +$('edZoom').value) })
-})
 const edC = $('edCanvas')
 // Ponto fora da moldura = girar (como no Photoshop); dentro = mover.
 function foraDaMoldura(ev) {
