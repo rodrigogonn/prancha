@@ -398,3 +398,16 @@ details.passo > summary::after {
   transform: translateY(-2px) rotate(45deg); transition: transform .15s;
 }
 details.passo[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+
+/* zoom da vista */
+.zoom { display: inline-flex; align-items: center; gap: 2px; margin-left: 10px; }
+.zoom .btn.icone { width: 26px; min-height: 26px; font-size: 15px; background: transparent; border-color: transparent; }
+.zoom .btn.icone:hover { background: var(--campo); }
+.zoom-val {
+  min-width: 48px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--texto2);
+  background: var(--campo); border: 1px solid var(--borda); border-radius: 5px; padding: 3px 4px;
+}
+.zoom-val:hover { color: var(--texto); }
+.folhas { min-width: 100%; width: max-content; margin: 0 auto; }
+body:not([data-etapa=prancha]) .zoom { display: none; }
+@media (max-width: 860px) { .zoom { display: none; } }

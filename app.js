@@ -340,7 +340,7 @@ function render() {
   const ch = prev.clientHeight - $('folhas').offsetTop - 64
   // no celular a folha ocupa a largura: medir pela altura fazia ela mudar quando a barra do navegador some na rolagem
   let dw = estreito ? cw : Math.min(cw, ch * L.W / L.H)
-  dw = Math.max(200, Math.min(dw, 900))
+  dw = Math.max(200, Math.min(dw, 900)) * (estreito ? 1 : zoomVista)
   const dh = dw * L.H / L.W
   const n = Math.max(1, L.folhas.length)
   while (canvases.length < n) {
@@ -352,7 +352,7 @@ function render() {
     canvases.push({ wrap, rot, c })
   }
   while (canvases.length > n) canvases.pop().wrap.remove()
-  const dpr = Math.min(2.5, window.devicePixelRatio || 1)
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1, 6000 / dw)
   const fontes = (id) => { const i = imgs.get(id); return i && { src: i.prev, w: i.w, h: i.h } }
   canvases.forEach((cv, i) => {
     const folha = L.folhas[i] || { itens: [], linhas: [] }
@@ -374,6 +374,22 @@ function render() {
   renderGrupos(L)
   salvar()
 }
+// Zoom só da vista (não muda a impressão): 1 = a folha cabe na tela.
+let zoomVista = 1
+const NIVEIS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 3, 4]
+function definirZoom(z, ancora) {
+  const prev = $('previa')
+  const antes = { w: prev.scrollWidth, h: prev.scrollHeight }
+  const ax = ancora ? ancora.x : prev.clientWidth / 2, ay = ancora ? ancora.y : prev.clientHeight / 2
+  const fx = (prev.scrollLeft + ax) / antes.w, fy = (prev.scrollTop + ay) / antes.h
+  zoomVista = Math.min(4, Math.max(0.5, z))
+  $('zoomVal').textContent = `${Math.round(zoomVista * 100)}%`
+  render()
+  // mantém o ponto que estava sob o cursor (ou o centro) no mesmo lugar
+  prev.scrollLeft = fx * prev.scrollWidth - ax
+  prev.scrollTop = fy * prev.scrollHeight - ay
+}
+const proximoNivel = (dir) => dir > 0 ? (NIVEIS.find(n => n > zoomVista + 0.01) ?? 4) : ([...NIVEIS].reverse().find(n => n < zoomVista - 0.01) ?? 0.5)
 function nomePapel() {
   if (state.papel === 'custom') return `${cm(state.papelW)} × ${cm(state.papelH)} cm`
   return ({ foto10x15: 'Foto 10 × 15', foto13x18: 'Foto 13 × 18', carta: 'Carta', oficio: 'Ofício' })[state.papel] || state.papel
@@ -705,6 +721,15 @@ function montarPainel() {
     const g = grupoVazio(); state.grupos.push(g); state.ativo = g.id; render()
     $('grupos').lastElementChild?.querySelector('input')?.select()
   }
+  $('zoomMais').onclick = () => definirZoom(proximoNivel(1))
+  $('zoomMenos').onclick = () => definirZoom(proximoNivel(-1))
+  $('zoomVal').onclick = () => definirZoom(1)
+  $('previa').addEventListener('wheel', (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || celular()) return
+    ev.preventDefault()
+    const r = $('previa').getBoundingClientRect()
+    definirZoom(zoomVista * Math.exp(-ev.deltaY * 0.002), { x: ev.clientX - r.left, y: ev.clientY - r.top })
+  }, { passive: false })
   $('vazio').onclick = () => escolherArquivos({ modo: 'grupo', g: grupoAtivo() })
   $('addFotos').onclick = () => escolherArquivos({ modo: 'grupo', g: grupoAtivo() })
   $('limpar').onclick = () => {
