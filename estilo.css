@@ -390,3 +390,11 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
 .rotulo.sep { margin-top: 16px; }
 
 .avisos:empty { display: none; }
+
+/* chevron padrão: para baixo fechado, para cima aberto (desenhado, sem depender de glifo) */
+details.passo > summary::after {
+  content: ''; width: 7px; height: 7px; margin-left: auto; margin-right: 3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); transition: transform .15s;
+}
+details.passo[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
