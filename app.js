@@ -336,7 +336,8 @@ function render() {
   const cont = $('folhas'), prev = $('previa')
   const estreito = window.innerWidth <= 860
   const cw = prev.clientWidth - (estreito ? 24 : 48)
-  const ch = prev.clientHeight - prev.querySelector('.barra-previa').offsetHeight - $('avisos').offsetHeight - 90
+  // altura livre = da folha até o fim da área, menos o rótulo embaixo dela e o respiro do fim
+  const ch = prev.clientHeight - $('folhas').offsetTop - 64
   // no celular a folha ocupa a largura: medir pela altura fazia ela mudar quando a barra do navegador some na rolagem
   let dw = estreito ? cw : Math.min(cw, ch * L.W / L.H)
   dw = Math.max(200, Math.min(dw, 900))
