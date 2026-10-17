@@ -369,7 +369,7 @@ details.ajustes > summary { text-transform: none; letter-spacing: 0; font-size: 
 .wz-trilha { margin-bottom: 20px; }
 .assistente h2 { margin-bottom: 14px; }
 .ed-topo b { margin-right: auto; font-variant-numeric: tabular-nums; }
-.ed-botoes #edPronto { margin-left: auto; }
+.ed-botoes #edCancelar { margin-left: auto; }
 .grupo .info.aviso { color: var(--perigo); }
 @media (max-width: 860px) {
   .papel { width: calc((100% - 50px) / 4 - 3px); }

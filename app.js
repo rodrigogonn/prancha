@@ -775,14 +775,26 @@ let ed = null
 function abrirEditor(it) {
   const f = imgs.get(it.q.img)
   if (!f) return
-  if (!it.q.crop) it.q.crop = cropPadrao()
-  ed = { it, f, ponteiros: new Map(), vista: null }
+  registrar()
+  // dar o recorte padrão a uma foto nunca ajustada não é uma mudança: não vira passo de desfazer
+  if (!it.q.crop) { it.q.crop = cropPadrao(); hist.ultimo = JSON.stringify(state) }
+  ed = { it, f, ponteiros: new Map(), vista: null, abertura: { json: hist.ultimo, n: hist.atras.length } }
   rotuloEditor()
   $('editor').hidden = false
   requestAnimationFrame(() => { desenharEditor() })
 }
 function rotuloEditor() { const [lw, lh] = dimsQ(ed.it.g, ed.it.q); $('edTam').textContent = `${cm(lw)} × ${cm(lh)} cm` }
 function fecharEditor() { $('editor').hidden = true; ed = null; registrar(); render() }
+// Cancelar volta o estado de quando o editor abriu e apaga do desfazer os passos dados lá dentro.
+function cancelarEditor() {
+  if (!ed) return
+  clearTimeout(regEditor)
+  const { json, n } = ed.abertura
+  $('editor').hidden = true; ed = null; selecionado = null
+  state = JSON.parse(json)
+  hist.atras.length = Math.min(n, hist.atras.length); hist.ultimo = json; hist.frente = []
+  sincronizarPainel(); render(); botoesHist()
+}
 
 // geometria da foto no quadro (mm, origem no centro do quadro)
 function caixaFoto() {
@@ -995,8 +1007,8 @@ $('edTirar').onclick = () => {
   fecharEditor()
 }
 $('edPronto').onclick = fecharEditor
-$('edFechar').onclick = fecharEditor
-$('editor').addEventListener('click', (ev) => { if (ev.target === $('editor')) fecharEditor() })
+$('edFechar').onclick = cancelarEditor
+$('edCancelar').onclick = cancelarEditor
 
 // ---------- desfazer / refazer ----------
 // Cada estado é uma foto do `state` em JSON; as imagens ficam por id, então é barato.
@@ -1045,7 +1057,8 @@ function botoesHist() {
 }
 document.querySelectorAll('[data-hist]').forEach(b => { b.onclick = () => (b.dataset.hist === 'desfazer' ? desfazer() : refazer()) })
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && ed) return fecharEditor()
+  if (ev.key === 'Escape' && ed) return cancelarEditor()
+  if (ev.key === 'Enter' && ed && !ev.target.closest('button')) { ev.preventDefault(); return fecharEditor() }
   const mod = ev.ctrlKey || ev.metaKey
   if (!mod || ev.target.tagName === 'INPUT') return
   const k = ev.key.toLowerCase()

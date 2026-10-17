@@ -126,7 +126,7 @@
 
 <div class="modal" id="editor" hidden>
   <div class="editor">
-    <div class="ed-topo"><b id="edTam"></b><button class="btn icone" id="edFechar" aria-label="fechar">✕</button></div>
+    <div class="ed-topo"><b id="edTam"></b><button class="btn icone" id="edFechar" aria-label="cancelar" title="cancelar (Esc)">✕</button></div>
     <canvas id="edCanvas"></canvas>
     <div class="ed-botoes">
       <button class="btn icone" data-hist="desfazer" title="Desfazer (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4 3 7l3 3"/><path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H7"/></svg></button>
@@ -137,7 +137,8 @@
       <button class="btn pequeno" id="edInteira">Inteira</button>
       <button class="btn pequeno" id="edTrocar">Trocar</button>
       <button class="btn pequeno perigo" id="edTirar">Remover</button>
-      <button class="btn primario" id="edPronto">Pronto</button>
+      <button class="btn" id="edCancelar" title="descartar (Esc)">Cancelar</button>
+      <button class="btn primario" id="edPronto" title="aplicar (Enter)">Pronto</button>
     </div>
   </div>
 </div>
